@@ -3963,6 +3963,21 @@ impl LiveCli {
         &self,
         emit_output: bool,
     ) -> Result<(BuiltRuntime, HookAbortMonitor), Box<dyn std::error::Error>> {
+        // ── Plan mode: structurally strip write tools ────────────
+        // Instead of asking the LLM "please don't write", we physically
+        // remove write tools from the tool list.  The LLM never sees
+        // bash, write_file, or edit_file — it can only read and search.
+        // This is the Claude Code approach: structural gating, not prompting.
+        let effective_tools = if self.plan_mode {
+            let mut read_only: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+            for tool in &["read_file", "glob_search", "grep_search", "list_directory"] {
+                read_only.insert(tool.to_string());
+            }
+            Some(read_only)
+        } else {
+            self.allowed_tools.clone()
+        };
+
         let hook_abort_signal = runtime::HookAbortSignal::new();
         let runtime = build_runtime(
             self.runtime.session().clone(),
@@ -3971,7 +3986,7 @@ impl LiveCli {
             self.system_prompt.clone(),
             true,
             emit_output,
-            self.allowed_tools.clone(),
+            effective_tools,
             self.permission_mode,
             None,
         )?
