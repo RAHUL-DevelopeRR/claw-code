@@ -200,13 +200,19 @@ fn prepare_command(
         return prepared;
     }
 
-    let mut prepared = Command::new("sh");
-    prepared.arg("-lc").arg(command).current_dir(cwd);
-    if sandbox_status.filesystem_active {
-        prepared.env("HOME", cwd.join(".sandbox-home"));
-        prepared.env("TMPDIR", cwd.join(".sandbox-tmp"));
+    if cfg!(windows) {
+        let mut prepared = Command::new("cmd.exe");
+        prepared.arg("/C").arg(command).current_dir(cwd);
+        prepared
+    } else {
+        let mut prepared = Command::new("sh");
+        prepared.arg("-lc").arg(command).current_dir(cwd);
+        if sandbox_status.filesystem_active {
+            prepared.env("HOME", cwd.join(".sandbox-home"));
+            prepared.env("TMPDIR", cwd.join(".sandbox-tmp"));
+        }
+        prepared
     }
-    prepared
 }
 
 fn prepare_tokio_command(
@@ -227,13 +233,19 @@ fn prepare_tokio_command(
         return prepared;
     }
 
-    let mut prepared = TokioCommand::new("sh");
-    prepared.arg("-lc").arg(command).current_dir(cwd);
-    if sandbox_status.filesystem_active {
-        prepared.env("HOME", cwd.join(".sandbox-home"));
-        prepared.env("TMPDIR", cwd.join(".sandbox-tmp"));
+    if cfg!(windows) {
+        let mut prepared = TokioCommand::new("cmd.exe");
+        prepared.arg("/C").arg(command).current_dir(cwd);
+        prepared
+    } else {
+        let mut prepared = TokioCommand::new("sh");
+        prepared.arg("-lc").arg(command).current_dir(cwd);
+        if sandbox_status.filesystem_active {
+            prepared.env("HOME", cwd.join(".sandbox-home"));
+            prepared.env("TMPDIR", cwd.join(".sandbox-tmp"));
+        }
+        prepared
     }
-    prepared
 }
 
 fn prepare_sandbox_dirs(cwd: &std::path::Path) {

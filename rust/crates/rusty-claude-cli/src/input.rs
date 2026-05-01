@@ -137,6 +137,13 @@ impl LineEditor {
         }
     }
 
+    /// Update the prompt string dynamically.  Used by the REPL to reflect
+    /// the active permission mode (e.g. "⏸ plan >" or "▶ auto >") so the
+    /// user always knows what context they are operating in.
+    pub fn set_prompt(&mut self, prompt: impl Into<String>) {
+        self.prompt = prompt.into();
+    }
+
     pub fn read_line(&mut self) -> io::Result<ReadOutcome> {
         if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
             return self.read_line_fallback();

@@ -8,8 +8,8 @@ const STARTER_CLAW_JSON: &str = concat!(
     "  }\n",
     "}\n",
 );
-const GITIGNORE_COMMENT: &str = "# Claw Code local artifacts";
-const GITIGNORE_ENTRIES: [&str; 3] = [".claw/settings.local.json", ".claw/sessions/", ".clawhip/"];
+const GITIGNORE_COMMENT: &str = "# NeuronCLI local artifacts";
+const GITIGNORE_ENTRIES: [&str; 3] = [".neuron/settings.local.json", ".neuron/sessions/", ".neuronhip/"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum InitStatus {
@@ -80,15 +80,15 @@ struct RepoDetection {
 pub(crate) fn initialize_repo(cwd: &Path) -> Result<InitReport, Box<dyn std::error::Error>> {
     let mut artifacts = Vec::new();
 
-    let claw_dir = cwd.join(".claw");
+    let claw_dir = cwd.join(".neuron");
     artifacts.push(InitArtifact {
-        name: ".claw/",
+        name: ".neuron/",
         status: ensure_dir(&claw_dir)?,
     });
 
-    let claw_json = cwd.join(".claw.json");
+    let claw_json = cwd.join(".neuron.json");
     artifacts.push(InitArtifact {
-        name: ".claw.json",
+        name: ".neuron.json",
         status: write_file_if_missing(&claw_json, STARTER_CLAW_JSON)?,
     });
 
@@ -98,10 +98,10 @@ pub(crate) fn initialize_repo(cwd: &Path) -> Result<InitReport, Box<dyn std::err
         status: ensure_gitignore_entries(&gitignore)?,
     });
 
-    let claude_md = cwd.join("CLAUDE.md");
+    let claude_md = cwd.join("NEURON.md");
     let content = render_init_claude_md(cwd);
     artifacts.push(InitArtifact {
-        name: "CLAUDE.md",
+        name: "NEURON.md",
         status: write_file_if_missing(&claude_md, &content)?,
     });
 
@@ -162,9 +162,9 @@ fn ensure_gitignore_entries(path: &Path) -> Result<InitStatus, std::io::Error> {
 pub(crate) fn render_init_claude_md(cwd: &Path) -> String {
     let detection = detect_repo(cwd);
     let mut lines = vec![
-        "# CLAUDE.md".to_string(),
+        "# NEURON.md".to_string(),
         String::new(),
-        "This file provides guidance to Claw Code (clawcode.dev) when working with code in this repository.".to_string(),
+        "This file provides guidance to NeuronCLI (zero-x.live) when working with code in this repository.".to_string(),
         String::new(),
     ];
 
@@ -209,8 +209,8 @@ pub(crate) fn render_init_claude_md(cwd: &Path) -> String {
 
     lines.push("## Working agreement".to_string());
     lines.push("- Prefer small, reviewable changes and keep generated bootstrap files aligned with actual repo workflows.".to_string());
-    lines.push("- Keep shared defaults in `.claw.json`; reserve `.claw/settings.local.json` for machine-local overrides.".to_string());
-    lines.push("- Do not overwrite existing `CLAUDE.md` content automatically; update it intentionally when repo workflows change.".to_string());
+    lines.push("- Keep shared defaults in `.neuron.json`; reserve `.neuron/settings.local.json` for machine-local overrides.".to_string());
+    lines.push("- Do not overwrite existing `NEURON.md` content automatically; update it intentionally when repo workflows change.".to_string());
     lines.push(String::new());
 
     lines.join("\n")
@@ -354,16 +354,16 @@ mod tests {
 
         let report = initialize_repo(&root).expect("init should succeed");
         let rendered = report.render();
-        assert!(rendered.contains(".claw/"));
-        assert!(rendered.contains(".claw.json"));
+        assert!(rendered.contains(".neuron/"));
+        assert!(rendered.contains(".neuron.json"));
         assert!(rendered.contains("created"));
         assert!(rendered.contains(".gitignore       created"));
-        assert!(rendered.contains("CLAUDE.md        created"));
-        assert!(root.join(".claw").is_dir());
-        assert!(root.join(".claw.json").is_file());
-        assert!(root.join("CLAUDE.md").is_file());
+        assert!(rendered.contains("NEURON.md        created"));
+        assert!(root.join(".neuron").is_dir());
+        assert!(root.join(".neuron.json").is_file());
+        assert!(root.join("NEURON.md").is_file());
         assert_eq!(
-            fs::read_to_string(root.join(".claw.json")).expect("read claw json"),
+            fs::read_to_string(root.join(".neuron.json")).expect("read neuron json"),
             concat!(
                 "{\n",
                 "  \"permissions\": {\n",
@@ -373,10 +373,10 @@ mod tests {
             )
         );
         let gitignore = fs::read_to_string(root.join(".gitignore")).expect("read gitignore");
-        assert!(gitignore.contains(".claw/settings.local.json"));
-        assert!(gitignore.contains(".claw/sessions/"));
-        assert!(gitignore.contains(".clawhip/"));
-        let claude_md = fs::read_to_string(root.join("CLAUDE.md")).expect("read claude md");
+        assert!(gitignore.contains(".neuron/settings.local.json"));
+        assert!(gitignore.contains(".neuron/sessions/"));
+        assert!(gitignore.contains(".neuronhip/"));
+        let claude_md = fs::read_to_string(root.join("NEURON.md")).expect("read neuron md");
         assert!(claude_md.contains("Languages: Rust."));
         assert!(claude_md.contains("cargo clippy --workspace --all-targets -- -D warnings"));
 
@@ -387,28 +387,28 @@ mod tests {
     fn initialize_repo_is_idempotent_and_preserves_existing_files() {
         let root = temp_dir();
         fs::create_dir_all(&root).expect("create root");
-        fs::write(root.join("CLAUDE.md"), "custom guidance\n").expect("write existing claude md");
-        fs::write(root.join(".gitignore"), ".claw/settings.local.json\n").expect("write gitignore");
+        fs::write(root.join("NEURON.md"), "custom guidance\n").expect("write existing neuron md");
+        fs::write(root.join(".gitignore"), ".neuron/settings.local.json\n").expect("write gitignore");
 
         let first = initialize_repo(&root).expect("first init should succeed");
         assert!(first
             .render()
-            .contains("CLAUDE.md        skipped (already exists)"));
+            .contains("NEURON.md        skipped (already exists)"));
         let second = initialize_repo(&root).expect("second init should succeed");
         let second_rendered = second.render();
-        assert!(second_rendered.contains(".claw/"));
-        assert!(second_rendered.contains(".claw.json"));
+        assert!(second_rendered.contains(".neuron/"));
+        assert!(second_rendered.contains(".neuron.json"));
         assert!(second_rendered.contains("skipped (already exists)"));
         assert!(second_rendered.contains(".gitignore       skipped (already exists)"));
-        assert!(second_rendered.contains("CLAUDE.md        skipped (already exists)"));
+        assert!(second_rendered.contains("NEURON.md        skipped (already exists)"));
         assert_eq!(
-            fs::read_to_string(root.join("CLAUDE.md")).expect("read existing claude md"),
+            fs::read_to_string(root.join("NEURON.md")).expect("read existing neuron md"),
             "custom guidance\n"
         );
         let gitignore = fs::read_to_string(root.join(".gitignore")).expect("read gitignore");
-        assert_eq!(gitignore.matches(".claw/settings.local.json").count(), 1);
-        assert_eq!(gitignore.matches(".claw/sessions/").count(), 1);
-        assert_eq!(gitignore.matches(".clawhip/").count(), 1);
+        assert_eq!(gitignore.matches(".neuron/settings.local.json").count(), 1);
+        assert_eq!(gitignore.matches(".neuron/sessions/").count(), 1);
+        assert_eq!(gitignore.matches(".neuronhip/").count(), 1);
 
         fs::remove_dir_all(root).expect("cleanup temp dir");
     }
