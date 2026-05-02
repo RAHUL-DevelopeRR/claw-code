@@ -12,9 +12,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Maximum number of files to index (prevent OOM on huge repos).
-const MAX_FILES: usize = 300;
+const MAX_FILES: usize = 150;
 /// Maximum total characters for the repo map output.
-const MAX_MAP_CHARS: usize = 12_000;
+const MAX_MAP_CHARS: usize = 6_000;
 /// File extensions we know how to extract symbols from.
 const SUPPORTED_EXTENSIONS: &[&str] = &[
     "rs", "py", "js", "ts", "tsx", "jsx", "go", "java", "rb", "c", "cpp", "h", "hpp",

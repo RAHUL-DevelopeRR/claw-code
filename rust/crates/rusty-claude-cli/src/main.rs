@@ -4214,7 +4214,7 @@ impl LiveCli {
             Ok(summary) => {
                 self.replace_runtime(runtime)?;
                 spinner.finish(
-                    "\x1b[38;2;45;140;60m\u{2714}\x1b[0m Done",
+                    "Done",
                     TerminalRenderer::new().color_theme(),
                     &mut stdout,
                 )?;
@@ -4242,7 +4242,7 @@ impl LiveCli {
             Err(error) => {
                 runtime.shutdown_plugins()?;
                 spinner.fail(
-                    "\x1b[38;2;200;50;40m\u{2717}\x1b[0m Request failed",
+                    "Request failed",
                     TerminalRenderer::new().color_theme(),
                     &mut stdout,
                 )?;
@@ -5664,23 +5664,25 @@ fn run_shell_escape(cmd: &str) {
 //   "[auto] > "        (auto-allow)
 
 fn mode_aware_prompt(mode: &PermissionMode, plan_mode: bool, orchestration_mode: Option<&str>) -> String {
+    // Use \x01 and \x02 to tell rustyline that ANSI codes are non-printing
+    // (prevents cursor misalignment)
     if plan_mode {
-        return "[plan] > ".to_string();
+        return "\x01\x1b[38;2;65;105;195m\x02[plan]\x01\x1b[0m\x02 > ".to_string();
     }
     if let Some(orch) = orchestration_mode {
         return match orch {
-            "divide" => "\x1b[36m[divide]\x1b[0m > ".to_string(),
-            "chain" => "\x1b[35m[chain]\x1b[0m > ".to_string(),
-            "power" => "\x1b[31m[power]\x1b[0m > ".to_string(),
+            "divide" => "\x01\x1b[38;2;90;200;250m\x02[divide]\x01\x1b[0m\x02 > ".to_string(),
+            "chain" => "\x01\x1b[38;2;240;160;40m\x02[chain]\x01\x1b[0m\x02 > ".to_string(),
+            "power" => "\x01\x1b[38;2;200;50;40m\x02[power]\x01\x1b[0m\x02 > ".to_string(),
             _ => "> ".to_string(),
         };
     }
     match mode {
-        PermissionMode::ReadOnly => "[read] > ".to_string(),
-        PermissionMode::WorkspaceWrite => "[edit] > ".to_string(),
+        PermissionMode::ReadOnly => "\x01\x1b[38;2;136;136;136m\x02[read]\x01\x1b[0m\x02 > ".to_string(),
+        PermissionMode::WorkspaceWrite => "\x01\x1b[38;2;240;160;40m\x02[edit]\x01\x1b[0m\x02 > ".to_string(),
         PermissionMode::DangerFullAccess => "> ".to_string(),
-        PermissionMode::Prompt => "[ask] > ".to_string(),
-        PermissionMode::Allow => "[auto] > ".to_string(),
+        PermissionMode::Prompt => "\x01\x1b[38;2;65;105;195m\x02[ask]\x01\x1b[0m\x02 > ".to_string(),
+        PermissionMode::Allow => "\x01\x1b[38;2;45;140;60m\x02[auto]\x01\x1b[0m\x02 > ".to_string(),
     }
 }
 
@@ -8345,7 +8347,7 @@ fn format_tool_call_start(name: &str, input: &str) -> String {
             format!(
                 "{ICON_EDIT} {ORANGE}{BOLD}Editing {path}{R}{}",
                 format_patch_preview(old_value, new_value)
-                    .map(|preview| format!("\n{preview}"))
+                    .map(|preview| format!("\n{BLUE}│{R}  {preview}"))
                     .unwrap_or_default()
             )
         }
@@ -8361,11 +8363,14 @@ fn format_tool_call_start(name: &str, input: &str) -> String {
         _ => summarize_tool_payload(input),
     };
 
-    // Blue bordered box with orange tool name
-    let inner_width = name.len() + 4;
-    let bottom_border = "─".repeat(inner_width);
+    // Full-width expanding box: ╭─── tool_name ────────────╮
+    let tw = term_width().saturating_sub(2).max(30);
+    let label_len = name.len() + 4; // "─ " + name + " ─"
+    let right_fill = tw.saturating_sub(label_len + 2); // 2 for ╭ and ╮
     format!(
-        "{BLUE}╭─ {ORANGE}{BOLD}{name}{R}{BLUE} ─╮{R}\n{BLUE}│{R} {detail}\n{BLUE}╰{bottom_border}╯{R}"
+        "{BLUE}╭─ {ORANGE}{BOLD}{name}{R}{BLUE} {right}╮{R}\n{BLUE}│{R}  {detail}\n{BLUE}╰{bottom}╯{R}",
+        right = "─".repeat(right_fill),
+        bottom = "─".repeat(tw.saturating_sub(2)),
     )
 }
 
@@ -11949,7 +11954,7 @@ UU conflicted.rs",
             r#"{"file":{"filePath":"src/main.rs","content":"hello","numLines":1,"startLine":1,"totalLines":1}}"#,
             false,
         );
-        assert!(done.contains("📄 Read src/main.rs"));
+        assert!(done.contains("Read src/main.rs"));
         assert!(done.contains("hello"));
     }
 
