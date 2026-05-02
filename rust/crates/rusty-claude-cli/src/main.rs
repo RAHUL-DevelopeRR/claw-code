@@ -1265,42 +1265,76 @@ fn azure_chat_call(
     messages: &[serde_json::Value],
     max_tokens: u32,
 ) -> Result<(String, u32), String> {
-    let base = env::var("AZURE_OPENAI_ENDPOINT").unwrap_or_else(|_| {
-        "https://rahul-mok8ryyn-eastus2.services.ai.azure.com/openai/v1".to_string()
-    });
+    let azure_host = env::var("AZURE_OPENAI_ENDPOINT")
+        .unwrap_or_else(|_| "https://rahul-mok8ryyn-eastus2.services.ai.azure.com/openai/v1".to_string());
+
+    // Derive the host root (strip /openai/v1 if present)
+    let host_root = azure_host
+        .trim_end_matches('/')
+        .trim_end_matches("/v1")
+        .trim_end_matches("/openai")
+        .to_string();
+
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(120))
         .build()
         .map_err(|e| format!("HTTP client error: {e}"))?;
 
-    let url = format!("{}/chat/completions", base.trim_end_matches('/'));
+    // Universal request body — same for every model
     let body = serde_json::json!({
-        "model": model,
         "messages": messages,
-        "max_completion_tokens": max_tokens,
+        "max_tokens": max_tokens,
     });
 
+    // Strategy 1: Deployment-specific URL (Azure AI standard)
+    let deploy_url = format!(
+        "{}/openai/deployments/{}/chat/completions?api-version=2024-10-21",
+        host_root, model
+    );
     let resp = client
-        .post(&url)
+        .post(&deploy_url)
         .header("content-type", "application/json")
         .header("api-key", api_key)
-        .bearer_auth(api_key)
         .json(&body)
-        .send()
-        .map_err(|e| format!("Azure call to {model} failed: {e}"))?;
+        .send();
 
-    let status = resp.status().as_u16();
-    let body_text = resp.text().unwrap_or_default();
+    let result = match resp {
+        Ok(r) if r.status().as_u16() == 200 => Some(r.text().unwrap_or_default()),
+        _ => {
+            // Strategy 2: /openai/v1 with model in body (OpenAI-compat)
+            let mut body_v1 = body.clone();
+            body_v1["model"] = serde_json::json!(model);
+            let v1_url = format!("{}/openai/v1/chat/completions", host_root);
+            match client
+                .post(&v1_url)
+                .header("content-type", "application/json")
+                .header("api-key", api_key)
+                .bearer_auth(api_key)
+                .json(&body_v1)
+                .send()
+            {
+                Ok(r) if r.status().as_u16() == 200 => Some(r.text().unwrap_or_default()),
+                Ok(r) => {
+                    let status = r.status().as_u16();
+                    let err_body = r.text().unwrap_or_default();
+                    return Err(format!("Azure {model} returned {status}: {}",
+                        err_body.chars().take(300).collect::<String>()));
+                }
+                Err(e) => return Err(format!("Azure call to {model} failed: {e}")),
+            }
+        }
+    };
 
-    if status != 200 {
-        return Err(format!("Azure {model} returned {status}: {body_text}"));
-    }
-
+    let body_text = result.unwrap_or_default();
     let parsed: serde_json::Value = serde_json::from_str(&body_text)
         .map_err(|e| format!("Parse error: {e}"))?;
 
-    let content = parsed["choices"][0]["message"]["content"]
+    // Universal response parsing — works for all model types
+    let msg = &parsed["choices"][0]["message"];
+    let content = msg["content"]
         .as_str()
+        .filter(|s| !s.is_empty())
+        .or_else(|| msg["reasoning_content"].as_str())
         .unwrap_or("")
         .to_string();
     let tokens = parsed["usage"]["total_tokens"]
@@ -1366,20 +1400,20 @@ fn openrouter_chat_call(
 struct OrchestratorModels;
 
 impl OrchestratorModels {
-    /// Cheap, fast Azure models for bulk work
+    /// Cheap, fast Azure models — deployment names from Azure AI Foundry
     fn cheap_azure() -> &'static [&'static str] {
-        &["Kimi-K2.5", "DeepSeek-V4-Flash", "FW-DeepSeek-V3.2"]
+        &["Kimi-K2.5", "FW-DeepSeek-V3.2", "DeepSeek-V4-Flash"]
     }
     /// OpenRouter free-tier model (4th agent)
     fn openrouter_free() -> &'static str {
         "qwen/qwen3-235b-a22b:free"
     }
-    /// Chain mode role assignments
+    /// Chain mode role assignments (all cheap)
     fn architect() -> &'static str { "Kimi-K2.5" }
-    fn coder() -> &'static str { "DeepSeek-V4-Flash" }
-    fn reviewer() -> &'static str { "FW-DeepSeek-V3.2" }
-    /// Merge agent (slightly smarter, still cheap)
-    fn merge() -> &'static str { "Kimi-K2.6" }
+    fn coder() -> &'static str { "FW-DeepSeek-V3.2" }
+    fn reviewer() -> &'static str { "Kimi-K2.6" }
+    /// Merge agent
+    fn merge() -> &'static str { "gpt-5.4-mini" }
 }
 
 
