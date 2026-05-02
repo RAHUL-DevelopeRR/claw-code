@@ -1310,14 +1310,69 @@ fn azure_chat_call(
     Ok((content, tokens))
 }
 
-/// Model roster for orchestration — maps roles to cheap Azure deployments.
-/// These are the actual deployment names from Azure AI Foundry.
+/// Direct OpenRouter chat completion call to a free-tier model.
+/// Falls back gracefully — orchestration continues if this fails.
+fn openrouter_chat_call(
+    api_key: &str,
+    model: &str,
+    messages: &[serde_json::Value],
+    max_tokens: u32,
+) -> Result<(String, u32), String> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(90))
+        .build()
+        .map_err(|e| format!("HTTP client error: {e}"))?;
+
+    let body = serde_json::json!({
+        "model": model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+    });
+
+    let resp = client
+        .post("https://openrouter.ai/api/v1/chat/completions")
+        .header("content-type", "application/json")
+        .header("authorization", format!("Bearer {}", api_key))
+        .header("HTTP-Referer", "https://zero-x.live")
+        .header("X-Title", "NeuronCLI")
+        .json(&body)
+        .send()
+        .map_err(|e| format!("OpenRouter call to {model} failed: {e}"))?;
+
+    let status = resp.status().as_u16();
+    let body_text = resp.text().unwrap_or_default();
+
+    if status != 200 {
+        return Err(format!("OpenRouter {model} returned {status}: {}", 
+            body_text.chars().take(200).collect::<String>()));
+    }
+
+    let parsed: serde_json::Value = serde_json::from_str(&body_text)
+        .map_err(|e| format!("Parse error: {e}"))?;
+
+    let content = parsed["choices"][0]["message"]["content"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
+    let tokens = parsed["usage"]["total_tokens"]
+        .as_u64()
+        .unwrap_or(0) as u32;
+
+    Ok((content, tokens))
+}
+
+/// Model roster for orchestration — maps roles to cheap Azure deployments
+/// and an OpenRouter free-tier agent as the 4th parallel agent.
 struct OrchestratorModels;
 
 impl OrchestratorModels {
-    /// Cheap, fast models for bulk work
-    fn cheap() -> &'static [&'static str] {
+    /// Cheap, fast Azure models for bulk work
+    fn cheap_azure() -> &'static [&'static str] {
         &["Kimi-K2.5", "DeepSeek-V4-Flash", "FW-DeepSeek-V3.2"]
+    }
+    /// OpenRouter free-tier model (4th agent)
+    fn openrouter_free() -> &'static str {
+        "qwen/qwen3-235b-a22b:free"
     }
     /// Chain mode role assignments
     fn architect() -> &'static str { "Kimi-K2.5" }
@@ -4272,14 +4327,16 @@ impl LiveCli {
                     );
                 }
                 "power" => {
-                    // REAL ensemble: 3 models generate simultaneously, merge agent combines
-                    let models = OrchestratorModels::cheap();
+                    // REAL ensemble: 3 Azure + 1 OpenRouter agent, merge agent combines
+                    let azure_models = OrchestratorModels::cheap_azure();
                     let mut results: Vec<(String, String, u32)> = Vec::new();
+                    let total_agents = azure_models.len() + 1; // +1 for OpenRouter
 
-                    for (i, model) in models.iter().enumerate() {
+                    // Azure agents
+                    for (i, model) in azure_models.iter().enumerate() {
                         eprintln!(
-                            "\x1b[31m[power]\x1b[0m \x1b[2mAgent {}/{}: {}...\x1b[0m",
-                            i + 1, models.len(), model
+                            "\x1b[31m[power]\x1b[0m \x1b[2mAgent {}/{}: {} (Azure)...\x1b[0m",
+                            i + 1, total_agents, model
                         );
                         let msgs = vec![serde_json::json!({
                             "role": "user",
@@ -4303,6 +4360,41 @@ impl LiveCli {
                                 );
                             }
                         }
+                    }
+
+                    // OpenRouter 4th agent (free tier, fail-safe)
+                    let or_model = OrchestratorModels::openrouter_free();
+                    eprintln!(
+                        "\x1b[31m[power]\x1b[0m \x1b[2mAgent {}/{}: {} (OpenRouter)...\x1b[0m",
+                        total_agents, total_agents, or_model
+                    );
+                    if let Some(or_key) = crate::auth::ensure_api_key() {
+                        let msgs = vec![serde_json::json!({
+                            "role": "user",
+                            "content": format!(
+                                "You are an expert developer. Solve this task with maximum quality.\n\
+                                 Write complete, production-ready code.\n\nTask: {}", input
+                            )
+                        })];
+                        match openrouter_chat_call(&or_key, or_model, &msgs, 6000) {
+                            Ok((text, tok)) => {
+                                eprintln!(
+                                    "\x1b[31m[power]\x1b[0m \x1b[32m✓\x1b[0m {} done ({tok} tokens)",
+                                    or_model
+                                );
+                                results.push((or_model.to_string(), text, tok));
+                            }
+                            Err(e) => {
+                                eprintln!(
+                                    "\x1b[31m[power]\x1b[0m \x1b[33m⊘\x1b[0m {} skipped: {e}",
+                                    or_model
+                                );
+                            }
+                        }
+                    } else {
+                        eprintln!(
+                            "\x1b[31m[power]\x1b[0m \x1b[33m⊘\x1b[0m OpenRouter skipped (no auth)"
+                        );
                     }
 
                     if results.is_empty() {
