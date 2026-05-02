@@ -3089,7 +3089,10 @@ fn run_resume_command(
         | SlashCommand::Ide { .. }
         | SlashCommand::Tag { .. }
         | SlashCommand::OutputStyle { .. }
-        | SlashCommand::AddDir { .. } => Err("unsupported resumed slash command".into()),
+        | SlashCommand::AddDir { .. }
+        | SlashCommand::Divide { .. }
+        | SlashCommand::Chain { .. }
+        | SlashCommand::Power { .. } => Err("unsupported resumed slash command".into()),
     }
 }
 
@@ -3242,7 +3245,7 @@ fn run_repl(
     //   6. everything else → direct LLM prompt       (API call)
     loop {
         // Update prompt to reflect current permission mode.
-        editor.set_prompt(&mode_aware_prompt(&cli.permission_mode, cli.plan_mode));
+        editor.set_prompt(&mode_aware_prompt(&cli.permission_mode, cli.plan_mode, cli.orchestration_mode.as_deref()));
         editor.set_completions(cli.repl_completion_candidates().unwrap_or_default());
 
         match editor.read_line()? {
@@ -3336,6 +3339,8 @@ struct LiveCli {
     permission_mode: PermissionMode,
     plan_mode: bool,
     plan_just_exited: bool,
+    /// Active orchestration strategy: None, "divide", "chain", or "power"
+    orchestration_mode: Option<String>,
     system_prompt: Vec<String>,
     runtime: BuiltRuntime,
     session: SessionHandle,
@@ -3846,6 +3851,7 @@ impl LiveCli {
             permission_mode,
             plan_mode: false,
             plan_just_exited: false,
+            orchestration_mode: None,
             system_prompt,
             runtime,
             session,
@@ -4059,6 +4065,88 @@ impl LiveCli {
                 input
             );
             effective_input.as_str()
+        } else if let Some(ref mode) = self.orchestration_mode {
+            // ── Orchestration mode prompt wrapping ──────────────
+            match mode.as_str() {
+                "divide" => {
+                    effective_input = format!(
+                        "[DIVIDE MODE — MULTI-FILE PARALLEL STRATEGY]\n\
+                         You are operating in DIVIDE mode. Follow this workflow:\n\n\
+                         1. ANALYZE the task and identify all files/modules needed.\n\
+                         2. For EACH file, act as a specialized sub-agent:\n\
+                         3. Design each file independently, ensuring clean interfaces.\n\
+                         4. After generating all files, act as an INTEGRATOR:\n\
+                            - Ensure imports/exports are consistent across files\n\
+                            - Verify shared state and data flow between modules\n\
+                            - Fix any cross-file dependency issues\n\
+                         5. Generate a summary showing which files were created and how they connect.\n\n\
+                         KEY PRINCIPLE: Each file should be a self-contained, high-quality module.\n\
+                         Think of yourself as multiple specialized agents working on different parts.\n\n\
+                         User's request: {}\n",
+                        input
+                    );
+                }
+                "chain" => {
+                    effective_input = format!(
+                        "[CHAIN MODE — ARCHITECT > CODER > REVIEWER]\n\
+                         You are operating in CHAIN mode. Execute THREE sequential phases:\n\n\
+                         === PHASE 1: ARCHITECT ===\n\
+                         Think as a senior architect. Design the approach:\n\
+                         - What components are needed and why\n\
+                         - Data flow between components\n\
+                         - API contracts and interfaces\n\
+                         - Edge cases to handle\n\
+                         Output: A clear technical design (NO code yet).\n\n\
+                         === PHASE 2: CODER ===\n\
+                         Now switch to coder mode. Implement the architect's design:\n\
+                         - Write clean, production-quality code\n\
+                         - Follow the architecture exactly\n\
+                         - Include proper error handling\n\
+                         - Add type hints, docstrings, comments\n\
+                         Output: Complete, working implementation files.\n\n\
+                         === PHASE 3: REVIEWER ===\n\
+                         Now switch to code reviewer mode. Review everything you just wrote:\n\
+                         - Find bugs, security issues, edge cases\n\
+                         - Check for missing error handling\n\
+                         - Verify the code matches the architecture\n\
+                         - Apply fixes directly to the code\n\
+                         Output: Hardened, reviewed final code.\n\n\
+                         IMPORTANT: Clearly label each phase with === headers.\n\
+                         The final output must include the REVIEWED code, not the first draft.\n\n\
+                         User's request: {}\n",
+                        input
+                    );
+                }
+                "power" => {
+                    effective_input = format!(
+                        "[POWER MODE — ENSEMBLE MERGE (MAXIMUM QUALITY)]\n\
+                         You are operating in POWER mode. Generate THREE different approaches:\n\n\
+                         === APPROACH A: PERFORMANCE-FOCUSED ===\n\
+                         Write the solution optimized for speed and efficiency.\n\
+                         Minimize allocations, use efficient algorithms, cache where possible.\n\n\
+                         === APPROACH B: READABILITY-FOCUSED ===\n\
+                         Write the solution optimized for clarity and maintainability.\n\
+                         Clean naming, extensive comments, simple control flow.\n\n\
+                         === APPROACH C: ROBUSTNESS-FOCUSED ===\n\
+                         Write the solution optimized for error handling and edge cases.\n\
+                         Handle every failure mode, validate all inputs, comprehensive logging.\n\n\
+                         === MERGED RESULT ===\n\
+                         Now act as a MERGE AGENT. Combine the BEST PARTS from all three:\n\
+                         - Take the efficient algorithms from Approach A\n\
+                         - Take the clean naming and structure from Approach B\n\
+                         - Take the error handling and validation from Approach C\n\
+                         - Produce ONE final implementation that has ALL strengths\n\n\
+                         The merged result is the ONLY code that gets written to files.\n\
+                         Label the final merged code clearly.\n\n\
+                         User's request: {}\n",
+                        input
+                    );
+                }
+                _ => {
+                    effective_input = input.to_string();
+                }
+            }
+            effective_input.as_str()
         } else {
             input
         };
@@ -4068,6 +4156,13 @@ impl LiveCli {
         let mut stdout = io::stdout();
         let spinner_label = if self.plan_mode {
             "\u{1f4cb} Planning..."
+        } else if self.orchestration_mode.is_some() {
+            match self.orchestration_mode.as_deref() {
+                Some("divide") => "\u{1f500} Dividing...",
+                Some("chain") => "\u{1f517} Chaining...",
+                Some("power") => "\u{26a1} Power mode...",
+                _ => "\u{1f9e0} Reasoning...",
+            }
         } else {
             "\u{1f9e0} Reasoning..."
         };
@@ -4389,6 +4484,88 @@ impl LiveCli {
                     }
                     Some(other) => {
                         eprintln!("Unknown plan argument: \"{other}\". Usage: /plan [on|off]");
+                    }
+                }
+                false
+            }
+            // ── Orchestration modes ─────────────────────────────
+            SlashCommand::Divide { task } => {
+                match task.as_deref().map(str::trim) {
+                    Some("off") => {
+                        self.orchestration_mode = None;
+                        eprintln!(
+                            "\x1b[36m[divide]\x1b[0m \x1b[1mDivide mode OFF\x1b[0m"
+                        );
+                    }
+                    _ => {
+                        self.orchestration_mode = Some("divide".to_string());
+                        eprintln!(
+                            "\x1b[36m[divide]\x1b[0m \x1b[1mDivide mode ON\x1b[0m \x1b[2m-- multi-file parallel strategy\x1b[0m"
+                        );
+                        eprintln!(
+                            "  \x1b[2mEach file/module assigned to a different model agent.\x1b[0m"
+                        );
+                        eprintln!(
+                            "  \x1b[2mAn integrator agent stitches outputs together.\x1b[0m"
+                        );
+                        eprintln!(
+                            "  \x1b[2mType /divide off to deactivate.\x1b[0m"
+                        );
+                    }
+                }
+                false
+            }
+            SlashCommand::Chain { task } => {
+                match task.as_deref().map(str::trim) {
+                    Some("off") => {
+                        self.orchestration_mode = None;
+                        eprintln!(
+                            "\x1b[35m[chain]\x1b[0m \x1b[1mChain mode OFF\x1b[0m"
+                        );
+                    }
+                    _ => {
+                        self.orchestration_mode = Some("chain".to_string());
+                        eprintln!(
+                            "\x1b[35m[chain]\x1b[0m \x1b[1mChain mode ON\x1b[0m \x1b[2m-- architect > coder > reviewer\x1b[0m"
+                        );
+                        eprintln!(
+                            "  \x1b[2mPhase 1: Architect agent designs the approach.\x1b[0m"
+                        );
+                        eprintln!(
+                            "  \x1b[2mPhase 2: Coder agent implements the design.\x1b[0m"
+                        );
+                        eprintln!(
+                            "  \x1b[2mPhase 3: Reviewer agent hardens and fixes bugs.\x1b[0m"
+                        );
+                        eprintln!(
+                            "  \x1b[2mType /chain off to deactivate.\x1b[0m"
+                        );
+                    }
+                }
+                false
+            }
+            SlashCommand::Power { task } => {
+                match task.as_deref().map(str::trim) {
+                    Some("off") => {
+                        self.orchestration_mode = None;
+                        eprintln!(
+                            "\x1b[31m[power]\x1b[0m \x1b[1mPower mode OFF\x1b[0m"
+                        );
+                    }
+                    _ => {
+                        self.orchestration_mode = Some("power".to_string());
+                        eprintln!(
+                            "\x1b[31m[power]\x1b[0m \x1b[1mPower mode ON\x1b[0m \x1b[2m-- ensemble merge (maximum quality)\x1b[0m"
+                        );
+                        eprintln!(
+                            "  \x1b[2mAll models generate the same module simultaneously.\x1b[0m"
+                        );
+                        eprintln!(
+                            "  \x1b[2mA merge agent combines the BEST PARTS from each.\x1b[0m"
+                        );
+                        eprintln!(
+                            "  \x1b[2mType /power off to deactivate.\x1b[0m"
+                        );
                     }
                 }
                 false
@@ -5349,6 +5526,17 @@ fn render_shortcuts_panel() -> String {
         row(&kv("/model",      "Switch model"),     &kv("/doctor",   "Health check")),
         row(&kv("/permissions","Set perms"),         &kv("/version",  "Show version")),
         row(&kv("?",           "This panel"),        &kv("/help",     "Full cmd list")),
+        blank.clone(),
+        row(
+            &format!("{hd}Orchestration{r}"),
+            &format!("{hd}{r}"),
+        ),
+        row(
+            &format!("{dm}{}{r}", "\u{2500}".repeat(14)),
+            &format!("{dm}{}{r}", "\u{2500}".repeat(14)),
+        ),
+        row(&kv("/divide",     "Multi-file split"), &kv("/chain",    "Arch>Code>Review")),
+        row(&kv("/power",      "Ensemble merge"),   &kv("",          "")),
         blank,
         bot,
     ]
@@ -5411,9 +5599,17 @@ fn run_shell_escape(cmd: &str) {
 //   "[edit] > "        (workspace-write)
 //   "[auto] > "        (auto-allow)
 
-fn mode_aware_prompt(mode: &PermissionMode, plan_mode: bool) -> String {
+fn mode_aware_prompt(mode: &PermissionMode, plan_mode: bool, orchestration_mode: Option<&str>) -> String {
     if plan_mode {
         return "[plan] > ".to_string();
+    }
+    if let Some(orch) = orchestration_mode {
+        return match orch {
+            "divide" => "\x1b[36m[divide]\x1b[0m > ".to_string(),
+            "chain" => "\x1b[35m[chain]\x1b[0m > ".to_string(),
+            "power" => "\x1b[31m[power]\x1b[0m > ".to_string(),
+            _ => "> ".to_string(),
+        };
     }
     match mode {
         PermissionMode::ReadOnly => "[read] > ".to_string(),

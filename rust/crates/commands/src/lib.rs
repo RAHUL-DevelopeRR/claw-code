@@ -1179,6 +1179,18 @@ pub enum SlashCommand {
     History {
         count: Option<String>,
     },
+    /// /divide — Division of Labor: subagent per file, parallel models
+    Divide {
+        task: Option<String>,
+    },
+    /// /chain — Sequential Refinement: architect → coder → reviewer
+    Chain {
+        task: Option<String>,
+    },
+    /// /power — Ensemble Merge: all models on same module, merge best parts
+    Power {
+        task: Option<String>,
+    },
     Unknown(String),
 }
 
@@ -1280,6 +1292,9 @@ impl SlashCommand {
             Self::Sandbox => "/sandbox",
             Self::Mcp { .. } => "/mcp",
             Self::Export { .. } => "/export",
+            Self::Divide { .. } => "/divide",
+            Self::Chain { .. } => "/chain",
+            Self::Power { .. } => "/power",
             #[allow(unreachable_patterns)]
             _ => "/unknown",
         }
@@ -1491,6 +1506,9 @@ pub fn validate_slash_command_input(
         "history" => SlashCommand::History {
             count: optional_single_arg(command, &args, "[count]")?,
         },
+        "divide" => SlashCommand::Divide { task: remainder },
+        "chain" => SlashCommand::Chain { task: remainder },
+        "power" => SlashCommand::Power { task: remainder },
         other => SlashCommand::Unknown(other.to_string()),
     }))
 }
@@ -4110,6 +4128,9 @@ pub fn handle_slash_command(
         | SlashCommand::OutputStyle { .. }
         | SlashCommand::AddDir { .. }
         | SlashCommand::History { .. }
+        | SlashCommand::Divide { .. }
+        | SlashCommand::Chain { .. }
+        | SlashCommand::Power { .. }
         | SlashCommand::Unknown(_) => None,
     }
 }
