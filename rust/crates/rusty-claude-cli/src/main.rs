@@ -75,7 +75,7 @@ const DEFAULT_DATE: &str = match option_env!("BUILD_DATE") {
     None => "unknown",
 };
 const DEFAULT_OAUTH_CALLBACK_PORT: u16 = 4545;
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+const VERSION: &str = "3.2.0";
 const BUILD_TARGET: Option<&str> = option_env!("TARGET");
 const GIT_SHA: Option<&str> = option_env!("GIT_SHA");
 const INTERNAL_PROGRESS_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(3);
@@ -258,9 +258,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 None
             };
             let effective_prompt = merge_prompt_with_stdin(&prompt, stdin_context.as_deref());
-            eprintln!("[DEBUG] creating LiveCli...");
             let mut cli = LiveCli::new(effective_model, true, allowed_tools, permission_mode)?;
-            eprintln!("[DEBUG] LiveCli ready, running turn...");
             cli.set_reasoning_effort(reasoning_effort);
             cli.run_turn_with_output(&effective_prompt, output_format, compact)?;
         }
@@ -1191,7 +1189,7 @@ fn resolve_provider() -> (String, String, String, &'static str) {
             "https://rahul-mok8ryyn-eastus2.services.ai.azure.com/openai/v1".to_string()
         });
         let azure_model = env::var("AZURE_OPENAI_MODEL")
-            .unwrap_or_else(|_| "model-router".to_string());
+            .unwrap_or_else(|_| "Kimi-K2.5".to_string());
 
         // Quick connectivity probe — if Azure is reachable, use it
         if azure_api_probe(&azure_key, &azure_base) {
@@ -1236,7 +1234,7 @@ fn azure_api_probe(api_key: &str, base_url: &str) -> bool {
     };
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
     let body = serde_json::json!({
-        "model": "model-router",
+        "model": "Kimi-K2.5",
         "messages": [{"role": "user", "content": "ping"}],
         "max_completion_tokens": 1
     });
@@ -7619,7 +7617,9 @@ impl AnthropicRuntimeClient {
         message_request: &MessageRequest,
         apply_stall_timeout: bool,
     ) -> Result<Vec<AssistantEvent>, RuntimeError> {
-        eprintln!("[DEBUG] sending stream_message to API...");
+        if std::env::var("NEURON_DEBUG").is_ok() {
+            eprintln!("[DEBUG] sending stream_message to API...");
+        }
         let mut stream = self
             .client
             .stream_message(message_request)
@@ -7627,7 +7627,9 @@ impl AnthropicRuntimeClient {
             .map_err(|error| {
                 RuntimeError::new(format_user_visible_api_error(&self.session_id, &error))
             })?;
-        eprintln!("[DEBUG] stream_message connected, reading events...");
+        if std::env::var("NEURON_DEBUG").is_ok() {
+            eprintln!("[DEBUG] stream_message connected, reading events...");
+        }
         let mut stdout = io::stdout();
         let mut sink = io::sink();
         let out: &mut dyn Write = if self.emit_output {
@@ -8211,9 +8213,11 @@ fn format_tool_call_start(name: &str, input: &str) -> String {
         _ => summarize_tool_payload(input),
     };
 
-    let border = "─".repeat(name.len() + 8);
+    // Top border: ╭─ NAME ─╮  (inner = "─ " + name + " ─" = name.len() + 4)
+    let inner_width = name.len() + 4;
+    let bottom_border = "─".repeat(inner_width);
     format!(
-        "\x1b[38;5;245m╭─ \x1b[1;36m{name}\x1b[0;38;5;245m ─╮\x1b[0m\n\x1b[38;5;245m│\x1b[0m {detail}\n\x1b[38;5;245m╰{border}╯\x1b[0m"
+        "\x1b[38;5;245m╭─ \x1b[1;36m{name}\x1b[0;38;5;245m ─╮\x1b[0m\n\x1b[38;5;245m│\x1b[0m {detail}\n\x1b[38;5;245m╰{bottom_border}╯\x1b[0m"
     )
 }
 
@@ -8253,13 +8257,27 @@ const TOOL_OUTPUT_DISPLAY_MAX_LINES: usize = 60;
 const TOOL_OUTPUT_DISPLAY_MAX_CHARS: usize = 4_000;
 
 fn extract_tool_path(parsed: &serde_json::Value) -> String {
-    parsed
+    let raw = parsed
         .get("file_path")
         .or_else(|| parsed.get("filePath"))
         .or_else(|| parsed.get("path"))
         .and_then(|value| value.as_str())
-        .unwrap_or("?")
-        .to_string()
+        .unwrap_or("?");
+    display_clean_path(raw)
+}
+
+/// Strip Windows `\\?\` UNC prefix and convert to relative path for display.
+fn display_clean_path(raw: &str) -> String {
+    // Strip the \\?\ extended-length prefix that Windows APIs inject
+    let cleaned = raw.strip_prefix(r"\\?\").unwrap_or(raw);
+    // Try to make it relative to the current working directory
+    if let Ok(cwd) = std::env::current_dir() {
+        if let Ok(rel) = Path::new(cleaned).strip_prefix(&cwd) {
+            let rel_str = rel.display().to_string();
+            return if rel_str.is_empty() { ".".to_string() } else { rel_str };
+        }
+    }
+    cleaned.to_string()
 }
 
 fn format_search_start(label: &str, parsed: &serde_json::Value) -> String {
@@ -8278,11 +8296,30 @@ fn format_patch_preview(old_value: &str, new_value: &str) -> Option<String> {
     if old_value.is_empty() && new_value.is_empty() {
         return None;
     }
-    Some(format!(
-        "\x1b[38;5;203m- {}\x1b[0m\n\x1b[38;5;70m+ {}\x1b[0m",
-        truncate_for_summary(first_visible_line(old_value), 72),
-        truncate_for_summary(first_visible_line(new_value), 72)
-    ))
+    let mut lines = Vec::new();
+    // Show up to 4 removed lines
+    for line in old_value.lines().filter(|l| !l.trim().is_empty()).take(4) {
+        lines.push(format!(
+            "\x1b[38;5;203m- {}\x1b[0m",
+            truncate_for_summary(line, 80)
+        ));
+    }
+    let old_remaining = old_value.lines().filter(|l| !l.trim().is_empty()).count().saturating_sub(4);
+    if old_remaining > 0 {
+        lines.push(format!("\x1b[2m  … {old_remaining} more lines removed\x1b[0m"));
+    }
+    // Show up to 4 added lines
+    for line in new_value.lines().filter(|l| !l.trim().is_empty()).take(4) {
+        lines.push(format!(
+            "\x1b[38;5;70m+ {}\x1b[0m",
+            truncate_for_summary(line, 80)
+        ));
+    }
+    let new_remaining = new_value.lines().filter(|l| !l.trim().is_empty()).count().saturating_sub(4);
+    if new_remaining > 0 {
+        lines.push(format!("\x1b[2m  … {new_remaining} more lines added\x1b[0m"));
+    }
+    if lines.is_empty() { None } else { Some(lines.join("\n")) }
 }
 
 fn format_bash_call(parsed: &serde_json::Value) -> String {
@@ -8456,6 +8493,7 @@ fn format_glob_result(icon: &str, parsed: &serde_json::Value) -> String {
                 .iter()
                 .filter_map(|value| value.as_str())
                 .take(8)
+                .map(display_clean_path)
                 .collect::<Vec<_>>()
                 .join("\n")
         })

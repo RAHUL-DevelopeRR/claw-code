@@ -31,10 +31,15 @@ impl SessionStore {
     /// The on-disk layout becomes `<cwd>/.claw/sessions/<workspace_hash>/`.
     pub fn from_cwd(cwd: impl AsRef<Path>) -> Result<Self, SessionControlError> {
         let cwd = cwd.as_ref();
-        let sessions_root = cwd
-            .join(".claw")
-            .join("sessions")
-            .join(workspace_fingerprint(cwd));
+        // Use .neuron as primary, fall back to .claw for existing sessions
+        let neuron_root = cwd.join(".neuron").join("sessions").join(workspace_fingerprint(cwd));
+        let claw_root = cwd.join(".claw").join("sessions").join(workspace_fingerprint(cwd));
+        // Migrate: if .claw exists but .neuron doesn't, use .claw for compat
+        let sessions_root = if neuron_root.exists() || !claw_root.exists() {
+            neuron_root
+        } else {
+            claw_root
+        };
         fs::create_dir_all(&sessions_root)?;
         Ok(Self {
             sessions_root,
@@ -515,13 +520,13 @@ fn session_id_from_path(path: &Path) -> Option<String> {
 
 fn format_missing_session_reference(reference: &str) -> String {
     format!(
-        "session not found: {reference}\nHint: managed sessions live in .claw/sessions/. Try `{LATEST_SESSION_REFERENCE}` for the most recent session or `/session list` in the REPL."
+        "session not found: {reference}\nHint: managed sessions live in .neuron/sessions/. Try `{LATEST_SESSION_REFERENCE}` for the most recent session or `/session list` in the REPL."
     )
 }
 
 fn format_no_managed_sessions() -> String {
     format!(
-        "no managed sessions found in .claw/sessions/\nStart `claw` to create a session, then rerun with `--resume {LATEST_SESSION_REFERENCE}`."
+        "no managed sessions found in .neuron/sessions/\nStart `neuron` to create a session, then rerun with `--resume {LATEST_SESSION_REFERENCE}`."
     )
 }
 
