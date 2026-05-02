@@ -4009,28 +4009,40 @@ impl LiveCli {
         let effective_input: String;
         let actual_input = if self.plan_mode {
             effective_input = format!(
-                "[PLAN MODE — ARCHITECTURE ONLY]\n\
-                 You are in plan mode. Generate a concise ARCHITECTURE PLAN only.\n\n\
-                 STRICT RULES:\n\
-                 - Do NOT generate full file contents or complete code listings\n\
-                 - Do NOT call write_file, bash, or any write/execute tools\n\
-                 - Keep code snippets to 5 lines MAX (just to illustrate approach)\n\
-                 - You MAY use read_file, glob_search, grep_search to analyze\n\n\
-                 OUTPUT FORMAT — keep it brief and scannable:\n\
+                "[PLAN MODE — RESEARCH FIRST, THEN PLAN]\n\
+                 You are in plan mode. Follow this two-phase workflow:\n\n\
+                 PHASE 1 — RESEARCH:\n\
+                 Use read_file, glob_search, grep_search to explore the codebase.\n\
+                 Understand existing patterns, file structure, and dependencies.\n\
+                 Read NEURON.md or README.md if they exist.\n\
+                 Do NOT skip this — your plan quality depends on real context.\n\n\
+                 PHASE 2 — STRUCTURED PLAN:\n\
+                 After researching, produce a detailed implementation plan:\n\n\
                  ## Goal\n\
-                 One-line summary of what we're building.\n\n\
+                 What we are building and why (2-3 sentences).\n\n\
+                 ## Current State\n\
+                 What exists now — relevant files, patterns, tech stack found.\n\n\
                  ## Architecture\n\
-                 - File: `filename` — what it does (1 line)\n\
-                 - File: `filename` — what it does (1 line)\n\n\
-                 ## Steps\n\
-                 1. Step description (no code)\n\
-                 2. Step description (no code)\n\n\
+                 For EACH file (new or modified):\n\
+                 ### `filename`\n\
+                 - Purpose: what this file does\n\
+                 - Key functions/components to create or modify\n\
+                 - How it connects to other files (data flow)\n\n\
+                 ## Implementation Steps\n\
+                 Numbered, detailed steps. Each step should explain:\n\
+                 - What to do\n\
+                 - Why this approach (design rationale)\n\
+                 - Edge cases to handle\n\n\
                  ## Dependencies\n\
-                 - package names only\n\n\
+                 Packages needed with versions.\n\n\
+                 ## Risks & Edge Cases\n\
+                 What could go wrong, browser compat, error handling.\n\n\
                  ## Verification\n\
-                 - How to test (1-2 lines)\n\n\
-                 When the user is satisfied, they type `/plan off` then \
-                 `execute the plan` to proceed.\n\n\
+                 Specific test steps to validate the implementation.\n\n\
+                 RULES:\n\
+                 - Do NOT generate full file contents\n\
+                 - Code snippets max 3-5 lines (illustrative only)\n\
+                 - Be detailed in WHAT and WHY, not in raw code\n\n\
                  User's request: {}\n",
                 input
             );
@@ -4076,6 +4088,17 @@ impl LiveCli {
                     &mut stdout,
                 )?;
                 println!();
+
+                // ── Record Azure quota usage ────────────────────────
+                // Persist output token count to ~/.neuroncli/quota.json
+                // so the banner shows accurate usage across sessions.
+                if std::env::var("OPENAI_BASE_URL")
+                    .map_or(false, |u| u.contains("azure"))
+                {
+                    let mut quota = crate::quota::QuotaState::load();
+                    quota.record_azure_usage(summary.usage.output_tokens as u32);
+                }
+
                 if let Some(event) = summary.auto_compaction {
                     println!(
                         "{}",
