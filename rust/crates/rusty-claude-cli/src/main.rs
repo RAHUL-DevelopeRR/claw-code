@@ -1182,27 +1182,28 @@ fn resolve_provider() -> (String, String, String, &'static str) {
         }
     }
 
-    // ── Priority 2: Azure AI Foundry (GPT-5.5, quota-limited) ───
+    // ── Priority 2: Azure AI Foundry (model-router, quota-limited) ───
     let quota = crate::quota::QuotaState::load();
     if !quota.is_azure_exhausted() {
         let azure_key = env::var("AZURE_OPENAI_API_KEY").unwrap_or_else(|_| deobfuscate_key());
         let azure_base = env::var("AZURE_OPENAI_ENDPOINT").unwrap_or_else(|_| {
             "https://rahul-mok8ryyn-eastus2.services.ai.azure.com/openai/v1".to_string()
         });
-        let azure_model = env::var("AZURE_OPENAI_MODEL").unwrap_or_else(|_| "gpt-5.5".to_string());
+        let azure_model = env::var("AZURE_OPENAI_MODEL")
+            .unwrap_or_else(|_| "model-router".to_string());
 
         // Quick connectivity probe — if Azure is reachable, use it
         if azure_api_probe(&azure_key, &azure_base) {
             eprintln!(
-                "\x1b[32m✓\x1b[0m Azure AI Foundry connected (GPT-5.5) · Quota: {}",
-                quota.display_compact()
+                "\x1b[32m✓\x1b[0m Azure AI Foundry ({}) · Quota: {}",
+                azure_model, quota.display_compact()
             );
             return (azure_key, azure_base, azure_model, "azure");
         }
-        eprintln!("\x1b[33m⚠\x1b[0m Azure unavailable — falling back to OpenRouter free tier");
+        eprintln!("\x1b[33m⚠\x1b[0m Azure unavailable — falling back to OpenRouter");
     } else {
         eprintln!(
-            "\x1b[33m⚠\x1b[0m Azure daily quota exhausted ({}) — using free tier",
+            "\x1b[33m⚠\x1b[0m Azure daily quota exhausted ({}) — using fallback",
             quota.display_compact()
         );
     }
@@ -1234,13 +1235,14 @@ fn azure_api_probe(api_key: &str, base_url: &str) -> bool {
     };
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
     let body = serde_json::json!({
-        "model": "gpt-5.5",
+        "model": "model-router",
         "messages": [{"role": "user", "content": "ping"}],
         "max_completion_tokens": 1
     });
     match client
         .post(&url)
         .header("content-type", "application/json")
+        .header("api-key", api_key)
         .bearer_auth(api_key)
         .json(&body)
         .send()
@@ -1248,11 +1250,81 @@ fn azure_api_probe(api_key: &str, base_url: &str) -> bool {
         Ok(resp) => {
             let status = resp.status().as_u16();
             // Any non-network response means the endpoint is reachable
-            // 200 = success, 429 = rate limited (still alive), 400 = bad request (still alive)
             status == 200 || status == 429 || status == 400 || status == 401
         }
         Err(_) => false,
     }
+}
+
+/// Direct Azure chat completion call to a specific deployed model.
+/// Used by orchestration modes to call multiple models (Kimi, DeepSeek, etc.)
+/// without going through the full runtime pipeline.
+fn azure_chat_call(
+    api_key: &str,
+    model: &str,
+    messages: &[serde_json::Value],
+    max_tokens: u32,
+) -> Result<(String, u32), String> {
+    let base = env::var("AZURE_OPENAI_ENDPOINT").unwrap_or_else(|_| {
+        "https://rahul-mok8ryyn-eastus2.services.ai.azure.com/openai/v1".to_string()
+    });
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .map_err(|e| format!("HTTP client error: {e}"))?;
+
+    let url = format!("{}/chat/completions", base.trim_end_matches('/'));
+    let body = serde_json::json!({
+        "model": model,
+        "messages": messages,
+        "max_completion_tokens": max_tokens,
+    });
+
+    let resp = client
+        .post(&url)
+        .header("content-type", "application/json")
+        .header("api-key", api_key)
+        .bearer_auth(api_key)
+        .json(&body)
+        .send()
+        .map_err(|e| format!("Azure call to {model} failed: {e}"))?;
+
+    let status = resp.status().as_u16();
+    let body_text = resp.text().unwrap_or_default();
+
+    if status != 200 {
+        return Err(format!("Azure {model} returned {status}: {body_text}"));
+    }
+
+    let parsed: serde_json::Value = serde_json::from_str(&body_text)
+        .map_err(|e| format!("Parse error: {e}"))?;
+
+    let content = parsed["choices"][0]["message"]["content"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
+    let tokens = parsed["usage"]["total_tokens"]
+        .as_u64()
+        .unwrap_or(0) as u32;
+
+    Ok((content, tokens))
+}
+
+/// Model roster for orchestration — maps roles to cheap Azure deployments.
+/// These are the actual deployment names from Azure AI Foundry.
+struct OrchestratorModels;
+
+impl OrchestratorModels {
+    /// Cheap, fast models for bulk work
+    fn cheap() -> &'static [&'static str] {
+        &["Kimi-K2.5", "DeepSeek-V4-Flash", "FW-DeepSeek-V3.2"]
+    }
+    /// Chain mode role assignments
+    fn architect() -> &'static str { "Kimi-K2.5" }
+    fn coder() -> &'static str { "DeepSeek-V4-Flash" }
+    fn reviewer() -> &'static str { "FW-DeepSeek-V3.2" }
+    /// Merge agent (slightly smarter, still cheap)
+    fn merge() -> &'static str { "Kimi-K2.6" }
 }
 
 
@@ -4066,81 +4138,230 @@ impl LiveCli {
             );
             effective_input.as_str()
         } else if let Some(ref mode) = self.orchestration_mode {
-            // ── Orchestration mode prompt wrapping ──────────────
+            // ── Orchestration mode — REAL multi-model calls ─────
+            let api_key = env::var("AZURE_OPENAI_API_KEY")
+                .unwrap_or_else(|_| deobfuscate_key());
             match mode.as_str() {
                 "divide" => {
+                    // Divide mode: instruct main model to split work per file
                     effective_input = format!(
                         "[DIVIDE MODE — MULTI-FILE PARALLEL STRATEGY]\n\
                          You are operating in DIVIDE mode. Follow this workflow:\n\n\
                          1. ANALYZE the task and identify all files/modules needed.\n\
-                         2. For EACH file, act as a specialized sub-agent:\n\
-                         3. Design each file independently, ensuring clean interfaces.\n\
-                         4. After generating all files, act as an INTEGRATOR:\n\
-                            - Ensure imports/exports are consistent across files\n\
-                            - Verify shared state and data flow between modules\n\
-                            - Fix any cross-file dependency issues\n\
-                         5. Generate a summary showing which files were created and how they connect.\n\n\
-                         KEY PRINCIPLE: Each file should be a self-contained, high-quality module.\n\
-                         Think of yourself as multiple specialized agents working on different parts.\n\n\
+                         2. For EACH file, act as a specialized sub-agent.\n\
+                         3. Design each file independently with clean interfaces.\n\
+                         4. After generating all files, act as INTEGRATOR:\n\
+                            - Ensure imports/exports are consistent\n\
+                            - Verify shared state and data flow\n\
+                            - Fix cross-file dependencies\n\
+                         5. Summary of files created and how they connect.\n\n\
                          User's request: {}\n",
                         input
                     );
                 }
                 "chain" => {
+                    // REAL multi-model chain: 3 sequential calls
+                    eprintln!(
+                        "\x1b[35m[chain]\x1b[0m \x1b[2mPhase 1: {} (architect)...\x1b[0m",
+                        OrchestratorModels::architect()
+                    );
+                    let arch_msgs = vec![serde_json::json!({
+                        "role": "user",
+                        "content": format!(
+                            "You are a senior software architect. Design the approach for this task.\n\
+                             Output ONLY the technical design:\n\
+                             - Components needed and why\n\
+                             - Data flow and interfaces\n\
+                             - Edge cases\n\
+                             NO code — just architecture.\n\nTask: {}", input
+                        )
+                    })];
+                    let arch_result = match azure_chat_call(
+                        &api_key, OrchestratorModels::architect(), &arch_msgs, 4000
+                    ) {
+                        Ok((text, tok)) => {
+                            eprintln!(
+                                "\x1b[35m[chain]\x1b[0m \x1b[32m✓\x1b[0m Architect done ({tok} tokens)"
+                            );
+                            text
+                        }
+                        Err(e) => {
+                            eprintln!("\x1b[35m[chain]\x1b[0m \x1b[31m✗\x1b[0m Architect failed: {e}");
+                            format!("(architect unavailable) Task: {}", input)
+                        }
+                    };
+
+                    eprintln!(
+                        "\x1b[35m[chain]\x1b[0m \x1b[2mPhase 2: {} (coder)...\x1b[0m",
+                        OrchestratorModels::coder()
+                    );
+                    let code_msgs = vec![
+                        serde_json::json!({
+                            "role": "system",
+                            "content": "You are an expert coder. Implement the architect's design below with clean, production-quality code. Include error handling, type hints, docstrings."
+                        }),
+                        serde_json::json!({
+                            "role": "user",
+                            "content": format!(
+                                "ARCHITECTURE DESIGN:\n{}\n\nORIGINAL TASK:\n{}\n\nImplement this now. Write complete, working code files.",
+                                arch_result, input
+                            )
+                        })
+                    ];
+                    let code_result = match azure_chat_call(
+                        &api_key, OrchestratorModels::coder(), &code_msgs, 8000
+                    ) {
+                        Ok((text, tok)) => {
+                            eprintln!(
+                                "\x1b[35m[chain]\x1b[0m \x1b[32m✓\x1b[0m Coder done ({tok} tokens)"
+                            );
+                            text
+                        }
+                        Err(e) => {
+                            eprintln!("\x1b[35m[chain]\x1b[0m \x1b[31m✗\x1b[0m Coder failed: {e}");
+                            arch_result.clone()
+                        }
+                    };
+
+                    eprintln!(
+                        "\x1b[35m[chain]\x1b[0m \x1b[2mPhase 3: {} (reviewer)...\x1b[0m",
+                        OrchestratorModels::reviewer()
+                    );
+                    let review_msgs = vec![
+                        serde_json::json!({
+                            "role": "system",
+                            "content": "You are a senior code reviewer. Review the code below. Find bugs, security issues, missing error handling. Output the FIXED final code."
+                        }),
+                        serde_json::json!({
+                            "role": "user",
+                            "content": format!(
+                                "ARCHITECTURE:\n{}\n\nCODE TO REVIEW:\n{}\n\nReview and output the hardened, fixed code.",
+                                arch_result, code_result
+                            )
+                        })
+                    ];
+                    let review_result = match azure_chat_call(
+                        &api_key, OrchestratorModels::reviewer(), &review_msgs, 8000
+                    ) {
+                        Ok((text, tok)) => {
+                            eprintln!(
+                                "\x1b[35m[chain]\x1b[0m \x1b[32m✓\x1b[0m Reviewer done ({tok} tokens)"
+                            );
+                            text
+                        }
+                        Err(e) => {
+                            eprintln!("\x1b[35m[chain]\x1b[0m \x1b[31m✗\x1b[0m Reviewer failed: {e}");
+                            code_result.clone()
+                        }
+                    };
+
+                    // Feed the complete chain output to the main model for tool execution
                     effective_input = format!(
-                        "[CHAIN MODE — ARCHITECT > CODER > REVIEWER]\n\
-                         You are operating in CHAIN mode. Execute THREE sequential phases:\n\n\
-                         === PHASE 1: ARCHITECT ===\n\
-                         Think as a senior architect. Design the approach:\n\
-                         - What components are needed and why\n\
-                         - Data flow between components\n\
-                         - API contracts and interfaces\n\
-                         - Edge cases to handle\n\
-                         Output: A clear technical design (NO code yet).\n\n\
-                         === PHASE 2: CODER ===\n\
-                         Now switch to coder mode. Implement the architect's design:\n\
-                         - Write clean, production-quality code\n\
-                         - Follow the architecture exactly\n\
-                         - Include proper error handling\n\
-                         - Add type hints, docstrings, comments\n\
-                         Output: Complete, working implementation files.\n\n\
-                         === PHASE 3: REVIEWER ===\n\
-                         Now switch to code reviewer mode. Review everything you just wrote:\n\
-                         - Find bugs, security issues, edge cases\n\
-                         - Check for missing error handling\n\
-                         - Verify the code matches the architecture\n\
-                         - Apply fixes directly to the code\n\
-                         Output: Hardened, reviewed final code.\n\n\
-                         IMPORTANT: Clearly label each phase with === headers.\n\
-                         The final output must include the REVIEWED code, not the first draft.\n\n\
-                         User's request: {}\n",
+                        "[CHAIN MODE — 3 MODELS COMPLETED]\n\
+                         Three specialized models have processed this task:\n\n\
+                         === ARCHITECT ({}) ===\n{}\n\n\
+                         === CODER ({}) ===\n{}\n\n\
+                         === REVIEWER ({}) ===\n{}\n\n\
+                         Execute the REVIEWER's final output using your tools (write_file, bash, etc.).\n\
+                         Write the files exactly as the reviewer specified.\n\
+                         Original task: {}\n",
+                        OrchestratorModels::architect(), arch_result,
+                        OrchestratorModels::coder(), code_result,
+                        OrchestratorModels::reviewer(), review_result,
                         input
                     );
                 }
                 "power" => {
-                    effective_input = format!(
-                        "[POWER MODE — ENSEMBLE MERGE (MAXIMUM QUALITY)]\n\
-                         You are operating in POWER mode. Generate THREE different approaches:\n\n\
-                         === APPROACH A: PERFORMANCE-FOCUSED ===\n\
-                         Write the solution optimized for speed and efficiency.\n\
-                         Minimize allocations, use efficient algorithms, cache where possible.\n\n\
-                         === APPROACH B: READABILITY-FOCUSED ===\n\
-                         Write the solution optimized for clarity and maintainability.\n\
-                         Clean naming, extensive comments, simple control flow.\n\n\
-                         === APPROACH C: ROBUSTNESS-FOCUSED ===\n\
-                         Write the solution optimized for error handling and edge cases.\n\
-                         Handle every failure mode, validate all inputs, comprehensive logging.\n\n\
-                         === MERGED RESULT ===\n\
-                         Now act as a MERGE AGENT. Combine the BEST PARTS from all three:\n\
-                         - Take the efficient algorithms from Approach A\n\
-                         - Take the clean naming and structure from Approach B\n\
-                         - Take the error handling and validation from Approach C\n\
-                         - Produce ONE final implementation that has ALL strengths\n\n\
-                         The merged result is the ONLY code that gets written to files.\n\
-                         Label the final merged code clearly.\n\n\
-                         User's request: {}\n",
-                        input
-                    );
+                    // REAL ensemble: 3 models generate simultaneously, merge agent combines
+                    let models = OrchestratorModels::cheap();
+                    let mut results: Vec<(String, String, u32)> = Vec::new();
+
+                    for (i, model) in models.iter().enumerate() {
+                        eprintln!(
+                            "\x1b[31m[power]\x1b[0m \x1b[2mAgent {}/{}: {}...\x1b[0m",
+                            i + 1, models.len(), model
+                        );
+                        let msgs = vec![serde_json::json!({
+                            "role": "user",
+                            "content": format!(
+                                "You are an expert developer. Solve this task with maximum quality.\n\
+                                 Write complete, production-ready code.\n\nTask: {}", input
+                            )
+                        })];
+                        match azure_chat_call(&api_key, model, &msgs, 6000) {
+                            Ok((text, tok)) => {
+                                eprintln!(
+                                    "\x1b[31m[power]\x1b[0m \x1b[32m✓\x1b[0m {} done ({tok} tokens)",
+                                    model
+                                );
+                                results.push((model.to_string(), text, tok));
+                            }
+                            Err(e) => {
+                                eprintln!(
+                                    "\x1b[31m[power]\x1b[0m \x1b[31m✗\x1b[0m {} failed: {e}",
+                                    model
+                                );
+                            }
+                        }
+                    }
+
+                    if results.is_empty() {
+                        effective_input = input.to_string();
+                    } else {
+                        // Build merge prompt with all results
+                        let mut merge_content = String::from(
+                            "You are a merge agent. Below are solutions from multiple AI models for the same task.\n\
+                             COMBINE the BEST PARTS from each into ONE final solution:\n\
+                             - Take the best algorithms\n\
+                             - Take the best naming and structure\n\
+                             - Take the best error handling\n\
+                             Produce ONE final, merged implementation.\n\n"
+                        );
+                        for (model, text, _) in &results {
+                            merge_content.push_str(&format!(
+                                "=== SOLUTION FROM {} ===\n{}\n\n", model, text
+                            ));
+                        }
+                        merge_content.push_str(&format!("ORIGINAL TASK: {}\n", input));
+
+                        eprintln!(
+                            "\x1b[31m[power]\x1b[0m \x1b[2mMerging with {}...\x1b[0m",
+                            OrchestratorModels::merge()
+                        );
+                        let merge_msgs = vec![serde_json::json!({
+                            "role": "user", "content": merge_content
+                        })];
+                        match azure_chat_call(
+                            &api_key, OrchestratorModels::merge(), &merge_msgs, 8000
+                        ) {
+                            Ok((merged, tok)) => {
+                                eprintln!(
+                                    "\x1b[31m[power]\x1b[0m \x1b[32m✓\x1b[0m Merge done ({tok} tokens)"
+                                );
+                                effective_input = format!(
+                                    "[POWER MODE — {} MODELS MERGED]\n\
+                                     Multiple models generated solutions, a merge agent combined the best parts.\n\n\
+                                     === MERGED RESULT ===\n{}\n\n\
+                                     Execute this merged code using your tools (write_file, bash, etc.).\n\
+                                     Write the files exactly as specified.\n\
+                                     Original task: {}\n",
+                                    results.len(), merged, input
+                                );
+                            }
+                            Err(e) => {
+                                eprintln!(
+                                    "\x1b[31m[power]\x1b[0m \x1b[31m✗\x1b[0m Merge failed: {e}"
+                                );
+                                // Fallback: use the first successful result
+                                effective_input = format!(
+                                    "[POWER MODE — FALLBACK]\n\
+                                     Merge failed, using best single output from {}.\n\n\
+                                     {}\n\nExecute this code. Original task: {}\n",
+                                    results[0].0, results[0].1, input
+                                );
+                            }
+                        }
+                    }
                 }
                 _ => {
                     effective_input = input.to_string();
