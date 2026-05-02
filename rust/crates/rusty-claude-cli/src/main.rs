@@ -7,11 +7,13 @@
     clippy::unused_self
 )]
 mod auth;
+mod brand;
 mod init;
 mod input;
 mod orchestrator;
 mod quota;
 mod render;
+mod repo_map;
 mod vault;
 
 use std::collections::BTreeSet;
@@ -1265,8 +1267,9 @@ fn provider_label(kind: ProviderKind) -> &'static str {
 }
 
 fn format_connected_line(model: &str) -> String {
+    use crate::brand::*;
     let provider = provider_label(detect_provider_kind(model));
-    format!("Connected: {model} via {provider}")
+    format!("{GREEN}{BOLD}✓{R} {DIM}Connected:{R} {BLUE}{BOLD}{model}{R} {DIM}via{R} {ORANGE}{provider}{R}")
 }
 
 fn filter_tool_specs(
@@ -3884,74 +3887,179 @@ impl LiveCli {
         } else {
             "OpenRouter"
         };
-        let version = env!("CARGO_PKG_VERSION");
+        let version = VERSION;
         let quota = crate::quota::QuotaState::load();
         let quota_str = quota.display_compact();
 
-        // ── Color codes ──────────────────────────────────────────────
-        let r  = "\x1b[0m";
-        let bc = "\x1b[38;2;100;100;100m";
-        let bl = "\x1b[38;2;65;105;195m";
-        let rd = "\x1b[38;2;200;50;40m";
-        let am = "\x1b[38;2;240;160;40m";
-        let gn = "\x1b[38;2;45;140;60m";
-        let sw = "\x1b[38;2;200;200;220m";
-        let dm = "\x1b[2m";
-        let bd = "\x1b[1m";
+        // ── Brand colors ──
+        use crate::brand::*;
+        let b = BLUE;     // border
+        let o = ORANGE;   // accent
+        let g = GREEN;    // success
+        let d = DIM;      // dim
+        let w = WHITE;    // bright
+        let s = SOFT;     // soft white
+        let bd = BOLD;
+        let r = R;
+        let ng = NEURON_LOGO;
 
-        let neuron_gradient = format!("{bl}{bd}N{rd}e{rd}u{am}r{am}o{gn}n{r}");
+        // Build repo map status
+        let repo_status = {
+            let cwd_path = env::current_dir().unwrap_or_default();
+            let map = crate::repo_map::RepoMap::build(&cwd_path);
+            map.status_line()
+        };
 
-        format!(concat!(
-            // Header line
-            "  {bc}\u{2576}{r} {ng} {dm}CLI v{ver}{r} {bc}\u{2500}\u{2500}\u{2500}{r} {dm}Powered by{r} {sw}\u{2297}{r} {dm}zero-x.live{r}\n",
-            // Top border
-            "  {bc}\u{256d}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{252c}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{256e}{r}\n",
-            // Row: empty
-            "  {bc}\u{2502}{r}                                      {bc}\u{2502}{r}                                  {bc}\u{2502}{r}\n",
-            // Row: welcome + tips heading
-            "  {bc}\u{2502}{r}      {bd}Welcome back, {user}!{r}           {bc}\u{2502}{r}  {am}{bd}Tips for getting started{r}         {bc}\u{2502}{r}\n",
-            // Row: empty + tips text
-            "  {bc}\u{2502}{r}                                      {bc}\u{2502}{r}  {dm}Run{r} /init {dm}to create a NEURON.md{r}  {bc}\u{2502}{r}\n",
-            // Row: stars + tips text
-            "  {bc}\u{2502}{r}   {sw}*{r}        {sw}\u{00b7}{r}        {sw}*{r}               {bc}\u{2502}{r}  {dm}file with project context{r}        {bc}\u{2502}{r}\n",
-            // Row: helix top
-            "  {bc}\u{2502}{r}  {sw}\u{00b7}{r}  {bl}\u{2572}\u{2550}\u{2550}\u{2550}\u{2557}{r}    {bl}\u{2554}\u{2550}\u{2550}\u{2550}\u{2571}{r}  {sw}\u{00b7}{r}               {bc}\u{2502}{r}  {dm}instructions for Neuron...{r}       {bc}\u{2502}{r}\n",
-            // Row: helix cross upper
-            "  {bc}\u{2502}{r} {sw}*{r}    {bl}\u{2572}\u{2550}\u{2550}{am}\u{256c}{rd}\u{2550}\u{2550}\u{2550}\u{2550}{am}\u{256c}{bl}\u{2550}\u{2550}\u{2571}{r}    {sw}*{r}               {bc}\u{2502}{r}                                  {bc}\u{2502}{r}\n",
-            // Row: helix mid upper + what's new heading
-            "  {bc}\u{2502}{r} {sw}\u{00b7}{r}  {gn}\u{2554}{bl}\u{2550}\u{2550}\u{2571}{r}  {sw}\u{00b7}  \u{00b7}{r}  {bl}\u{2572}\u{2550}\u{2550}{gn}\u{2557}{r}  {sw}\u{00b7}{r}              {bc}\u{2502}{r}  {am}{bd}What's new{r}                       {bc}\u{2502}{r}\n",
-            // Row: helix center
-            "  {bc}\u{2502}{r}    {rd}\u{256c}{bl}\u{2550}\u{2550}\u{2571}{r}   {sw}\u{00b7}  \u{00b7}{r}   {bl}\u{2572}\u{2550}\u{2550}{rd}\u{256c}{r}               {bc}\u{2502}{r}  {dm}\u{2500} 44K token/day Azure quota{r}      {bc}\u{2502}{r}\n",
-            // Row: helix mid lower
-            "  {bc}\u{2502}{r} {sw}\u{00b7}{r}  {gn}\u{255a}{bl}\u{2550}\u{2550}\u{2572}{r}  {sw}\u{00b7}  \u{00b7}{r}  {bl}\u{2571}\u{2550}\u{2550}{gn}\u{255d}{r}  {sw}\u{00b7}{r}              {bc}\u{2502}{r}  {dm}\u{2500} OpenRouter free fallback{r}       {bc}\u{2502}{r}\n",
-            // Row: helix cross lower
-            "  {bc}\u{2502}{r} {sw}*{r}    {bl}\u{2571}\u{2550}\u{2550}{am}\u{256c}{rd}\u{2550}\u{2550}\u{2550}\u{2550}{am}\u{256c}{bl}\u{2550}\u{2550}\u{2572}{r}    {sw}*{r}               {bc}\u{2502}{r}  {dm}\u{2500} Interactive trust prompt{r}        {bc}\u{2502}{r}\n",
-            // Row: helix bottom
-            "  {bc}\u{2502}{r}  {sw}\u{00b7}{r}  {bl}\u{2571}\u{2550}\u{2550}\u{2550}\u{255d}{r}    {bl}\u{255a}\u{2550}\u{2550}\u{2550}\u{2572}{r}  {sw}\u{00b7}{r}               {bc}\u{2502}{r}  {dm}/release-notes for more{r}         {bc}\u{2502}{r}\n",
-            // Row: neuron text
-            "  {bc}\u{2502}{r}   {sw}*{r}     {ng}     {sw}*{r}                 {bc}\u{2502}{r}                                  {bc}\u{2502}{r}\n",
-            // Row: zero-x branding
-            "  {bc}\u{2502}{r}      {sw}\u{2297}{r} {dm}zero-x.live{r}                  {bc}\u{2502}{r}                                  {bc}\u{2502}{r}\n",
-            // Row: empty
-            "  {bc}\u{2502}{r}                                      {bc}\u{2502}{r}                                  {bc}\u{2502}{r}\n",
-            // Row: model info
-            "  {bc}\u{2502}{r}   {dm}{ms} \u{00b7} {prov} \u{00b7} Quota: {qs}{r}   {bc}\u{2502}{r}                                  {bc}\u{2502}{r}\n",
-            // Row: cwd
-            "  {bc}\u{2502}{r}   {dm}{cwd}{r}                        {bc}\u{2502}{r}                                  {bc}\u{2502}{r}\n",
-            // Row: empty
-            "  {bc}\u{2502}{r}                                      {bc}\u{2502}{r}                                  {bc}\u{2502}{r}\n",
-            // Bottom border
-            "  {bc}\u{2570}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2534}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{256f}{r}\n",
-        ),
-            bc=bc, r=r, bl=bl, rd=rd, am=am, gn=gn, sw=sw, dm=dm, bd=bd,
-            ng=neuron_gradient,
+        // ── Clean box layout with dynamic widths ──
+        let w_left = 38;  // left panel inner width
+        let w_right = 34; // right panel inner width
+        let w_total = w_left + w_right + 3; // +3 for │ separator
+
+        let mut lines = Vec::new();
+
+        // Header line
+        lines.push(format!(
+            "  {b}╶{r} {ng} {d}CLI v{ver}{r} {b}───{r} {d}Powered by{r} {s}⊗{r} {d}zero-x.live{r}",
             ver=version,
-            user=username,
-            ms=model_short,
-            prov=provider,
-            qs=quota_str,
-            cwd=cwd,
-        )
+        ));
+
+        // Top border
+        lines.push(format!(
+            "  {b}╭{left}┬{right}╮{r}",
+            left = "─".repeat(w_left),
+            right = "─".repeat(w_right),
+        ));
+
+        // Empty row
+        lines.push(format!(
+            "  {b}│{r}{ls}{b}│{r}{rs}{b}│{r}",
+            ls = " ".repeat(w_left),
+            rs = " ".repeat(w_right),
+        ));
+
+        // Welcome + Tips heading
+        let welcome = format!("{w}{bd}Welcome back, {user}!{r}", user=username);
+        let tips = format!("{o}{bd}Tips for getting started{r}");
+        lines.push(format!(
+            "  {b}│{r}  {welcome}{wpad}{b}│{r}  {tips}{tpad}{b}│{r}",
+            wpad = " ".repeat(w_left.saturating_sub(brand::strip_ansi_len(&welcome) + 2)),
+            tpad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&tips) + 2)),
+        ));
+
+        // Tips content
+        let tip1 = format!("{d}Run{r} {o}/init{r} {d}to create a NEURON.md{r}");
+        lines.push(format!(
+            "  {b}│{r}{ls}{b}│{r}  {tip1}{tpad}{b}│{r}",
+            ls = " ".repeat(w_left),
+            tpad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&tip1) + 2)),
+        ));
+
+        let tip2 = format!("{d}file with project context{r}");
+        lines.push(format!(
+            "  {b}│{r}   {s}*{r}        {s}·{r}        {s}*{r}   {hpad}{b}│{r}  {tip2}{tpad}{b}│{r}",
+            hpad = " ".repeat(w_left.saturating_sub(27)),
+            tpad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&tip2) + 2)),
+        ));
+
+        let tip3 = format!("{d}instructions for Neuron...{r}");
+        lines.push(format!(
+            "  {b}│{r}  {s}·{r}  {b}╲══╗{r}    {b}╔══╲{r}  {s}·{r}   {hpad}{b}│{r}  {tip3}{tpad}{b}│{r}",
+            hpad = " ".repeat(w_left.saturating_sub(27)),
+            tpad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&tip3) + 2)),
+        ));
+
+        // Helix center rows + what's new
+        let whatsnew = format!("{o}{bd}What's new{r}");
+        lines.push(format!(
+            "  {b}│{r} {s}*{r}    {b}╲══{o}╬{RED}════{o}╬{b}══╲{r}    {s}*{r}   {hpad}{b}│{r}{rpad}{b}│{r}",
+            RED=RED, hpad = " ".repeat(w_left.saturating_sub(30)),
+            rpad = " ".repeat(w_right),
+        ));
+
+        lines.push(format!(
+            "  {b}│{r} {s}·{r}  {g}╔{b}══╲{r}  {s}·  ·{r}  {b}╲══{g}╗{r}  {s}·{r}  {hpad}{b}│{r}  {whatsnew}{wpad}{b}│{r}",
+            hpad = " ".repeat(w_left.saturating_sub(30)),
+            wpad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&whatsnew) + 2)),
+        ));
+
+        // What's new items
+        let news = [
+            format!("{d}─ 44K token/day Azure quota{r}"),
+            format!("{d}─ OpenRouter free fallback{r}"),
+            format!("{d}─ {repo_status}{r}"),
+            format!("{d}/release-notes for more{r}"),
+        ];
+
+        lines.push(format!(
+            "  {b}│{r}    {RED}╬{b}══╲{r}   {s}·  ·{r}   {b}╲══{RED}╬{r}   {hpad}{b}│{r}  {n}{npad}{b}│{r}",
+            RED=RED, hpad = " ".repeat(w_left.saturating_sub(30)),
+            n = news[0], npad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&news[0]) + 2)),
+        ));
+
+        lines.push(format!(
+            "  {b}│{r} {s}·{r}  {g}╚{b}══╲{r}  {s}·  ·{r}  {b}╲══{g}╝{r}  {s}·{r}  {hpad}{b}│{r}  {n}{npad}{b}│{r}",
+            hpad = " ".repeat(w_left.saturating_sub(30)),
+            n = news[1], npad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&news[1]) + 2)),
+        ));
+
+        lines.push(format!(
+            "  {b}│{r} {s}*{r}    {b}╲══{o}╬{RED}════{o}╬{b}══╲{r}    {s}*{r}   {hpad}{b}│{r}  {n}{npad}{b}│{r}",
+            RED=RED, hpad = " ".repeat(w_left.saturating_sub(30)),
+            n = news[2], npad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&news[2]) + 2)),
+        ));
+
+        lines.push(format!(
+            "  {b}│{r}  {s}·{r}  {b}╲══╝{r}    {b}╚══╲{r}  {s}·{r}   {hpad}{b}│{r}  {n}{npad}{b}│{r}",
+            hpad = " ".repeat(w_left.saturating_sub(27)),
+            n = news[3], npad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&news[3]) + 2)),
+        ));
+
+        // Neuron branding row
+        lines.push(format!(
+            "  {b}│{r}   {s}*{r}     {ng}     {s}*{r}     {hpad}{b}│{r}{rpad}{b}│{r}",
+            hpad = " ".repeat(w_left.saturating_sub(27)),
+            rpad = " ".repeat(w_right),
+        ));
+
+        // ⊗ zero-x.live
+        lines.push(format!(
+            "  {b}│{r}      {s}⊗{r} {d}zero-x.live{r}          {hpad}{b}│{r}{rpad}{b}│{r}",
+            hpad = " ".repeat(w_left.saturating_sub(33)),
+            rpad = " ".repeat(w_right),
+        ));
+
+        // Model info
+        let model_info = format!("{g}{ms}{r} {d}·{r} {b}{prov}{r} {d}· Quota: {qs}{r}",
+            ms=model_short, prov=provider, qs=quota_str);
+        lines.push(format!(
+            "  {b}│{r}  {model_info}{mpad}{b}│{r}{rpad}{b}│{r}",
+            mpad = " ".repeat(w_left.saturating_sub(brand::strip_ansi_len(&model_info) + 2)),
+            rpad = " ".repeat(w_right),
+        ));
+
+        // CWD
+        let cwd_line = format!("{d}{cwd}{r}");
+        lines.push(format!(
+            "  {b}│{r}  {cwd_line}{cpad}{b}│{r}{rpad}{b}│{r}",
+            cpad = " ".repeat(w_left.saturating_sub(brand::strip_ansi_len(&cwd_line) + 2)),
+            rpad = " ".repeat(w_right),
+        ));
+
+        // Empty row
+        lines.push(format!(
+            "  {b}│{r}{ls}{b}│{r}{rs}{b}│{r}",
+            ls = " ".repeat(w_left),
+            rs = " ".repeat(w_right),
+        ));
+
+        // Bottom border
+        lines.push(format!(
+            "  {b}╰{left}┴{right}╯{r}",
+            left = "─".repeat(w_left),
+            right = "─".repeat(w_right),
+        ));
+
+        lines.join("\n")
     }
 
     fn repl_completion_candidates(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
@@ -5257,41 +5365,69 @@ fn confirm_session_deletion(session_id: &str) -> bool {
 }
 
 fn render_session_list(active_session_id: &str) -> Result<String, Box<dyn std::error::Error>> {
+    use crate::brand::*;
     let sessions = list_managed_sessions()?;
-    let mut lines = vec![
-        "Sessions".to_string(),
-        format!("  Directory         {}", sessions_dir()?.display()),
-    ];
+    let w = 72; // box width
+
+    let mut lines = Vec::new();
+    lines.push(box_top("Sessions", w));
+
+    // Directory row
+    let dir_display = sessions_dir()?.display().to_string();
+    let dir_short = display_clean_path(&dir_display);
+    lines.push(box_row(&format!("{DIM}Directory: {dir_short}{R}"), w));
+    lines.push(box_separator(w));
+
     if sessions.is_empty() {
-        lines.push("  No managed sessions saved yet.".to_string());
+        lines.push(box_row(&format!("{DIM}No managed sessions saved yet.{R}"), w));
+        lines.push(box_bottom(w));
         return Ok(lines.join("\n"));
     }
-    for session in sessions {
-        let marker = if session.id == active_session_id {
-            "● current"
+
+    // Header
+    lines.push(box_row(
+        &format!(
+            "{BLUE}{BOLD}{id:<24} {status:<10} {msgs:<6} {modified}{R}",
+            id = "SESSION",
+            status = "STATUS",
+            msgs = "MSGS",
+            modified = "MODIFIED",
+        ),
+        w,
+    ));
+    lines.push(box_separator(w));
+
+    // Session rows
+    for session in &sessions {
+        let (marker_icon, status_text) = if session.id == active_session_id {
+            (ICON_ACTIVE, format!("{GREEN}current{R}"))
         } else {
-            "○ saved"
+            (ICON_INACTIVE, format!("{DIM}saved{R}"))
         };
+        let id_display = if session.id.len() > 22 {
+            format!("{}…", &session.id[..21])
+        } else {
+            session.id.clone()
+        };
+        let modified = format_session_modified_age(session.modified_epoch_millis);
         let lineage = match (
             session.branch_name.as_deref(),
             session.parent_session_id.as_deref(),
         ) {
-            (Some(branch_name), Some(parent_session_id)) => {
-                format!(" branch={branch_name} from={parent_session_id}")
-            }
-            (None, Some(parent_session_id)) => format!(" from={parent_session_id}"),
-            (Some(branch_name), None) => format!(" branch={branch_name}"),
-            (None, None) => String::new(),
+            (Some(branch), _) => format!(" {ORANGE}⎇ {branch}{R}"),
+            _ => String::new(),
         };
-        lines.push(format!(
-            "  {id:<20} {marker:<10} msgs={msgs:<4} modified={modified}{lineage} path={path}",
-            id = session.id,
+
+        let row_content = format!(
+            "{marker_icon} {ORANGE}{id:<22}{R} {status:<10} {DIM}{msgs:<6}{R} {DIM}{modified}{R}{lineage}",
+            id = id_display,
+            status = status_text,
             msgs = session.message_count,
-            modified = format_session_modified_age(session.modified_epoch_millis),
-            lineage = lineage,
-            path = session.path.display(),
-        ));
+        );
+        lines.push(box_row(&row_content, w));
     }
+
+    lines.push(box_bottom(w));
     Ok(lines.join("\n"))
 }
 
@@ -6885,12 +7021,21 @@ fn short_tool_id(id: &str) -> String {
 }
 
 fn build_system_prompt() -> Result<Vec<String>, Box<dyn std::error::Error>> {
-    Ok(load_system_prompt(
-        env::current_dir()?,
+    let cwd = env::current_dir()?;
+    let mut prompt = load_system_prompt(
+        cwd.clone(),
         DEFAULT_DATE,
         env::consts::OS,
         "unknown",
-    )?)
+    )?;
+
+    // ── Cascade: inject codebase context into system prompt ──
+    let repo_map = crate::repo_map::RepoMap::build(&cwd);
+    if repo_map.total_files > 0 {
+        prompt.push(repo_map.render());
+    }
+
+    Ok(prompt)
 }
 
 fn build_runtime_plugin_state() -> Result<RuntimePluginState, Box<dyn std::error::Error>> {
@@ -8167,6 +8312,7 @@ fn slash_command_completion_candidates_with_sessions(
 }
 
 fn format_tool_call_start(name: &str, input: &str) -> String {
+    use crate::brand::*;
     let parsed: serde_json::Value =
         serde_json::from_str(input).unwrap_or(serde_json::Value::String(input.to_string()));
 
@@ -8174,7 +8320,7 @@ fn format_tool_call_start(name: &str, input: &str) -> String {
         "bash" | "Bash" => format_bash_call(&parsed),
         "read_file" | "Read" => {
             let path = extract_tool_path(&parsed);
-            format!("\x1b[2m📄 Reading {path}…\x1b[0m")
+            format!("{DIM}📄 Reading {path}…{R}")
         }
         "write_file" | "Write" => {
             let path = extract_tool_path(&parsed);
@@ -8182,7 +8328,7 @@ fn format_tool_call_start(name: &str, input: &str) -> String {
                 .get("content")
                 .and_then(|value| value.as_str())
                 .map_or(0, |content| content.lines().count());
-            format!("\x1b[1;32m✏️ Writing {path}\x1b[0m \x1b[2m({lines} lines)\x1b[0m")
+            format!("{GREEN}{BOLD}✏️ Writing {path}{R} {DIM}({lines} lines){R}")
         }
         "edit_file" | "Edit" => {
             let path = extract_tool_path(&parsed);
@@ -8197,42 +8343,42 @@ fn format_tool_call_start(name: &str, input: &str) -> String {
                 .and_then(|value| value.as_str())
                 .unwrap_or_default();
             format!(
-                "\x1b[1;33m📝 Editing {path}\x1b[0m{}",
+                "{ORANGE}{BOLD}📝 Editing {path}{R}{}",
                 format_patch_preview(old_value, new_value)
                     .map(|preview| format!("\n{preview}"))
                     .unwrap_or_default()
             )
         }
-        "glob_search" | "Glob" => format_search_start("🔎 Glob", &parsed),
-        "grep_search" | "Grep" => format_search_start("🔎 Grep", &parsed),
-        "web_search" | "WebSearch" => parsed
-            .get("query")
-            .and_then(|value| value.as_str())
-            .unwrap_or("?")
-            .to_string(),
+        "glob_search" | "Glob" => format_search_start(&format!("{BLUE}🔎 Glob{R}"), &parsed),
+        "grep_search" | "Grep" => format_search_start(&format!("{BLUE}🔎 Grep{R}"), &parsed),
+        "web_search" | "WebSearch" => {
+            let query = parsed
+                .get("query")
+                .and_then(|value| value.as_str())
+                .unwrap_or("?");
+            format!("{ORANGE}🌐 Searching:{R} {query}")
+        }
         _ => summarize_tool_payload(input),
     };
 
-    // Top border: ╭─ NAME ─╮  (inner = "─ " + name + " ─" = name.len() + 4)
+    // Blue bordered box with orange tool name
     let inner_width = name.len() + 4;
     let bottom_border = "─".repeat(inner_width);
     format!(
-        "\x1b[38;5;245m╭─ \x1b[1;36m{name}\x1b[0;38;5;245m ─╮\x1b[0m\n\x1b[38;5;245m│\x1b[0m {detail}\n\x1b[38;5;245m╰{bottom_border}╯\x1b[0m"
+        "{BLUE}╭─ {ORANGE}{BOLD}{name}{R}{BLUE} ─╮{R}\n{BLUE}│{R} {detail}\n{BLUE}╰{bottom_border}╯{R}"
     )
 }
 
 fn format_tool_result(name: &str, output: &str, is_error: bool) -> String {
-    let icon = if is_error {
-        "\x1b[1;31m✗\x1b[0m"
-    } else {
-        "\x1b[1;32m✓\x1b[0m"
-    };
+    use crate::brand::*;
+    let icon = if is_error { ICON_ERR } else { ICON_OK };
+
     if is_error {
         let summary = truncate_for_summary(output.trim(), 160);
         return if summary.is_empty() {
-            format!("{icon} \x1b[38;5;245m{name}\x1b[0m")
+            format!("{icon} {DIM}{name}{R}")
         } else {
-            format!("{icon} \x1b[38;5;245m{name}\x1b[0m\n\x1b[38;5;203m{summary}\x1b[0m")
+            format!("{icon} {DIM}{name}{R}\n{RED}{summary}{R}")
         };
     }
 
@@ -8293,6 +8439,7 @@ fn format_search_start(label: &str, parsed: &serde_json::Value) -> String {
 }
 
 fn format_patch_preview(old_value: &str, new_value: &str) -> Option<String> {
+    use crate::brand::*;
     if old_value.is_empty() && new_value.is_empty() {
         return None;
     }
@@ -8300,24 +8447,24 @@ fn format_patch_preview(old_value: &str, new_value: &str) -> Option<String> {
     // Show up to 4 removed lines
     for line in old_value.lines().filter(|l| !l.trim().is_empty()).take(4) {
         lines.push(format!(
-            "\x1b[38;5;203m- {}\x1b[0m",
+            "{RED}─ {}{R}",
             truncate_for_summary(line, 80)
         ));
     }
     let old_remaining = old_value.lines().filter(|l| !l.trim().is_empty()).count().saturating_sub(4);
     if old_remaining > 0 {
-        lines.push(format!("\x1b[2m  … {old_remaining} more lines removed\x1b[0m"));
+        lines.push(format!("{DIM}  … {old_remaining} more lines removed{R}"));
     }
     // Show up to 4 added lines
     for line in new_value.lines().filter(|l| !l.trim().is_empty()).take(4) {
         lines.push(format!(
-            "\x1b[38;5;70m+ {}\x1b[0m",
+            "{GREEN}+ {}{R}",
             truncate_for_summary(line, 80)
         ));
     }
     let new_remaining = new_value.lines().filter(|l| !l.trim().is_empty()).count().saturating_sub(4);
     if new_remaining > 0 {
-        lines.push(format!("\x1b[2m  … {new_remaining} more lines added\x1b[0m"));
+        lines.push(format!("{DIM}  … {new_remaining} more lines added{R}"));
     }
     if lines.is_empty() { None } else { Some(lines.join("\n")) }
 }
@@ -8331,8 +8478,10 @@ fn format_bash_call(parsed: &serde_json::Value) -> String {
         String::new()
     } else {
         format!(
-            "\x1b[48;5;236;38;5;255m $ {} \x1b[0m",
-            truncate_for_summary(command, 160)
+            "{}{} $ {} {}",
+            crate::brand::BG_CODE, crate::brand::WHITE,
+            truncate_for_summary(command, 160),
+            crate::brand::R
         )
     }
 }
@@ -8344,9 +8493,10 @@ fn first_visible_line(text: &str) -> &str {
 }
 
 fn format_bash_result(icon: &str, parsed: &serde_json::Value) -> String {
+    use crate::brand::*;
     use std::fmt::Write as _;
 
-    let mut lines = vec![format!("{icon} \x1b[38;5;245mbash\x1b[0m")];
+    let mut lines = vec![format!("{icon} {}{BOLD}bash{}{R}", crate::brand::BLUE, crate::brand::R)];
     if let Some(task_id) = parsed
         .get("backgroundTaskId")
         .and_then(|value| value.as_str())
@@ -8372,12 +8522,14 @@ fn format_bash_result(icon: &str, parsed: &serde_json::Value) -> String {
     if let Some(stderr) = parsed.get("stderr").and_then(|value| value.as_str()) {
         if !stderr.trim().is_empty() {
             lines.push(format!(
-                "\x1b[38;5;203m{}\x1b[0m",
+                "{}{}{}",
+                crate::brand::RED,
                 truncate_output_for_display(
                     stderr,
                     TOOL_OUTPUT_DISPLAY_MAX_LINES,
                     TOOL_OUTPUT_DISPLAY_MAX_CHARS,
-                )
+                ),
+                crate::brand::R,
             ));
         }
     }
@@ -8386,6 +8538,7 @@ fn format_bash_result(icon: &str, parsed: &serde_json::Value) -> String {
 }
 
 fn format_read_result(icon: &str, parsed: &serde_json::Value) -> String {
+    use crate::brand::*;
     let file = parsed.get("file").unwrap_or(parsed);
     let path = extract_tool_path(file);
     let start_line = file
@@ -8407,7 +8560,7 @@ fn format_read_result(icon: &str, parsed: &serde_json::Value) -> String {
     let end_line = start_line.saturating_add(num_lines.saturating_sub(1));
 
     format!(
-        "{icon} \x1b[2m📄 Read {path} (lines {}-{} of {})\x1b[0m\n{}",
+        "{icon} {DIM}📄 Read {path} (lines {}-{} of {}){R}\n{}",
         start_line,
         end_line.max(start_line),
         total_lines,
@@ -8416,6 +8569,7 @@ fn format_read_result(icon: &str, parsed: &serde_json::Value) -> String {
 }
 
 fn format_write_result(icon: &str, parsed: &serde_json::Value) -> String {
+    use crate::brand::*;
     let path = extract_tool_path(parsed);
     let kind = parsed
         .get("type")
@@ -8426,7 +8580,7 @@ fn format_write_result(icon: &str, parsed: &serde_json::Value) -> String {
         .and_then(|value| value.as_str())
         .map_or(0, |content| content.lines().count());
     format!(
-        "{icon} \x1b[1;32m✏️ {} {path}\x1b[0m \x1b[2m({line_count} lines)\x1b[0m",
+        "{icon} {GREEN}{BOLD}✏️ {} {path}{R} {DIM}({line_count} lines){R}",
         if kind == "create" { "Wrote" } else { "Updated" },
     )
 }
@@ -8438,8 +8592,8 @@ fn format_structured_patch_preview(parsed: &serde_json::Value) -> Option<String>
         let lines = hunk.get("lines")?.as_array()?;
         for line in lines.iter().filter_map(|value| value.as_str()).take(6) {
             match line.chars().next() {
-                Some('+') => preview.push(format!("\x1b[38;5;70m{line}\x1b[0m")),
-                Some('-') => preview.push(format!("\x1b[38;5;203m{line}\x1b[0m")),
+                Some('+') => preview.push(format!("{GREEN}{line}{R}", GREEN=crate::brand::GREEN, R=crate::brand::R)),
+                Some('-') => preview.push(format!("{RED}{line}{R}", RED=crate::brand::RED, R=crate::brand::R)),
                 _ => preview.push(line.to_string()),
             }
         }
@@ -8475,8 +8629,8 @@ fn format_edit_result(icon: &str, parsed: &serde_json::Value) -> String {
     });
 
     match preview {
-        Some(preview) => format!("{icon} \x1b[1;33m📝 Edited {path}{suffix}\x1b[0m\n{preview}"),
-        None => format!("{icon} \x1b[1;33m📝 Edited {path}{suffix}\x1b[0m"),
+        Some(preview) => format!("{icon} {ORANGE}{BOLD}📝 Edited {path}{suffix}{R}\n{preview}", ORANGE=crate::brand::ORANGE, BOLD=crate::brand::BOLD, R=crate::brand::R),
+        None => format!("{icon} {ORANGE}{BOLD}📝 Edited {path}{suffix}{R}", ORANGE=crate::brand::ORANGE, BOLD=crate::brand::BOLD, R=crate::brand::R),
     }
 }
 
