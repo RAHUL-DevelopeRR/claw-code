@@ -20,6 +20,8 @@ pub const DIM: &str = "\x1b[38;2;136;136;136m";
 pub const WHITE: &str = "\x1b[38;2;220;220;230m";
 /// Soft white for decorative elements                         (#C8C8DC)
 pub const SOFT: &str = "\x1b[38;2;200;200;220m";
+/// Cyan for code/commands                                     (#5AC8FA)
+pub const CYAN: &str = "\x1b[38;2;90;200;250m";
 /// Bold modifier
 pub const BOLD: &str = "\x1b[1m";
 /// Dim modifier
@@ -35,20 +37,40 @@ pub const BG_CODE: &str = "\x1b[48;5;236m";
 /// Neuron gradient text: N(blue) e(red) u(orange) r(orange) o(green) n(green)
 pub const NEURON_LOGO: &str = "\x1b[1;38;2;65;105;195mN\x1b[38;2;200;50;40me\x1b[38;2;240;160;40mu\x1b[38;2;240;160;40mr\x1b[38;2;45;140;60mo\x1b[38;2;45;140;60mn\x1b[0m";
 
-// ── Semantic formatting helpers ──────────────────────────────────────────────
+// ── Block character icons (NO emojis) ────────────────────────────────────────
+// These are single-width Unicode characters that render identically
+// on every terminal, every OS, every font.  Premium, minimal, consistent.
 
-/// Green ✓ icon
-pub const ICON_OK: &str = "\x1b[38;2;45;140;60m✓\x1b[0m";
-/// Red ✗ icon
-pub const ICON_ERR: &str = "\x1b[38;2;200;50;40m✗\x1b[0m";
-/// Blue ● icon
-pub const ICON_ACTIVE: &str = "\x1b[38;2;65;105;195m●\x1b[0m";
-/// Dim ○ icon
-pub const ICON_INACTIVE: &str = "\x1b[38;2;136;136;136m○\x1b[0m";
-/// Orange ▸ icon
-pub const ICON_ARROW: &str = "\x1b[38;2;240;160;40m▸\x1b[0m";
-/// Blue ◆ icon
-pub const ICON_DIAMOND: &str = "\x1b[38;2;65;105;195m◆\x1b[0m";
+/// Green checkmark indicator
+pub const ICON_OK: &str = "\x1b[38;2;45;140;60m\u{2713}\x1b[0m";         // ✓
+/// Red cross indicator
+pub const ICON_ERR: &str = "\x1b[38;2;200;50;40m\u{2717}\x1b[0m";        // ✗
+/// Blue filled circle (active)
+pub const ICON_ACTIVE: &str = "\x1b[38;2;65;105;195m\u{25CF}\x1b[0m";    // ●
+/// Dim empty circle (inactive)
+pub const ICON_INACTIVE: &str = "\x1b[38;2;136;136;136m\u{25CB}\x1b[0m"; // ○
+/// Orange right-pointing triangle (action/arrow)
+pub const ICON_ARROW: &str = "\x1b[38;2;240;160;40m\u{25B8}\x1b[0m";     // ▸
+/// Blue small diamond
+pub const ICON_DIAMOND: &str = "\x1b[38;2;65;105;195m\u{25C6}\x1b[0m";   // ◆
+/// Cyan file indicator (replaces 📄)
+pub const ICON_FILE: &str = "\x1b[38;2;90;200;250m\u{25A0}\x1b[0m";      // ■
+/// Green write indicator (replaces ✏️)
+pub const ICON_WRITE: &str = "\x1b[38;2;45;140;60m\u{25B6}\x1b[0m";      // ▶
+/// Orange edit indicator (replaces 📝)
+pub const ICON_EDIT: &str = "\x1b[38;2;240;160;40m\u{25C8}\x1b[0m";      // ◈
+/// Blue search indicator (replaces 🔎)
+pub const ICON_SEARCH: &str = "\x1b[38;2;65;105;195m\u{25C9}\x1b[0m";    // ◉
+/// Orange web indicator (replaces 🌐)
+pub const ICON_WEB: &str = "\x1b[38;2;240;160;40m\u{25CE}\x1b[0m";       // ◎
+/// Blue thinking indicator (replaces 🧠)
+pub const ICON_THINK: &str = "\x1b[38;2;65;105;195m\u{25E6}\x1b[0m";     // ◦
+/// Green done indicator (replaces ✨)
+pub const ICON_DONE: &str = "\x1b[38;2;45;140;60m\u{2714}\x1b[0m";       // ✔
+/// Orange command/bash indicator (replaces $)
+pub const ICON_CMD: &str = "\x1b[38;2;240;160;40m\u{25B8}\x1b[0m";       // ▸
+
+// ── Semantic formatting helpers ──────────────────────────────────────────────
 
 /// Wrap text with green (success context).
 #[must_use]
@@ -86,16 +108,42 @@ pub fn bright(text: &str) -> String {
     format!("{WHITE}{BOLD}{text}{R}")
 }
 
-// ── Box drawing helpers ─────────────────────────────────────────────────────
+// ── Terminal width detection ─────────────────────────────────────────────────
 
-/// Draw a blue-bordered box top with a centered title.
+/// Get the current terminal width.  Falls back to 80 if detection fails.
+#[must_use]
+pub fn term_width() -> usize {
+    // Try crossterm first, then fallback to environment variable, then 80
+    #[cfg(not(test))]
+    {
+        if let Ok((cols, _)) = crossterm::terminal::size() {
+            return cols as usize;
+        }
+    }
+    std::env::var("COLUMNS")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(80)
+}
+
+/// Clamp a box width to fit the terminal, with a minimum of `min_width`.
+#[must_use]
+pub fn clamped_width(desired: usize, min_width: usize) -> usize {
+    let tw = term_width().saturating_sub(2); // leave 2 chars margin
+    desired.min(tw).max(min_width)
+}
+
+// ── Box drawing helpers (terminal-width-aware) ──────────────────────────────
+
+/// Draw a blue-bordered box top with a title.
 ///
 /// Example: `╭─── Sessions ───────────────────────╮`
 #[must_use]
 pub fn box_top(title: &str, width: usize) -> String {
-    let inner = width.saturating_sub(2); // inside ╭ and ╮
-    let label = format!(" {title} ");
-    let label_len = title.len() + 2; // " title "
+    let w = clamped_width(width, 30);
+    let inner = w.saturating_sub(2); // inside ╭ and ╮
+    let label = format!(" {} ", title);
+    let label_len = strip_ansi_len(&label);
     let left_pad = 3; // "───"
     let right_pad = inner.saturating_sub(left_pad + label_len);
     format!(
@@ -107,33 +155,37 @@ pub fn box_top(title: &str, width: usize) -> String {
 }
 
 /// Draw a blue-bordered box bottom.
-///
-/// Example: `╰────────────────────────────────────╯`
 #[must_use]
 pub fn box_bottom(width: usize) -> String {
-    let inner = width.saturating_sub(2);
+    let w = clamped_width(width, 30);
+    let inner = w.saturating_sub(2);
     format!("{BLUE}╰{dashes}╯{R}", dashes = "─".repeat(inner))
 }
 
 /// Draw a blue-bordered box separator.
-///
-/// Example: `├────────────────────────────────────┤`
 #[must_use]
 pub fn box_separator(width: usize) -> String {
-    let inner = width.saturating_sub(2);
+    let w = clamped_width(width, 30);
+    let inner = w.saturating_sub(2);
     format!("{BLUE}├{dashes}┤{R}", dashes = "─".repeat(inner))
 }
 
-/// Draw a blue-bordered row with content left-aligned.
-///
-/// Example: `│  some content here                 │`
+/// Draw a blue-bordered row with content left-aligned, truncated to fit.
 #[must_use]
 pub fn box_row(content: &str, width: usize) -> String {
-    let inner = width.saturating_sub(2);
+    let w = clamped_width(width, 30);
+    let inner = w.saturating_sub(2);
     let visible = strip_ansi_len(content);
-    let padding = inner.saturating_sub(visible + 1); // 1 for left space
+    // If content is too wide, truncate it
+    let display = if visible > inner.saturating_sub(2) {
+        truncate_ansi(content, inner.saturating_sub(4))
+    } else {
+        content.to_string()
+    };
+    let display_len = strip_ansi_len(&display);
+    let padding = inner.saturating_sub(display_len + 1); // 1 for left space
     format!(
-        "{BLUE}│{R} {content}{pad}{BLUE}│{R}",
+        "{BLUE}│{R} {display}{pad}{BLUE}│{R}",
         pad = " ".repeat(padding),
     )
 }
@@ -141,7 +193,8 @@ pub fn box_row(content: &str, width: usize) -> String {
 /// Draw a blue-bordered empty row.
 #[must_use]
 pub fn box_empty(width: usize) -> String {
-    let inner = width.saturating_sub(2);
+    let w = clamped_width(width, 30);
+    let inner = w.saturating_sub(2);
     format!("{BLUE}│{R}{spaces}{BLUE}│{R}", spaces = " ".repeat(inner))
 }
 
@@ -164,6 +217,35 @@ pub fn strip_ansi_len(s: &str) -> usize {
     len
 }
 
+/// Truncate an ANSI-colored string to `max_visible` characters,
+/// preserving escape codes and appending `…` if truncated.
+#[must_use]
+pub fn truncate_ansi(s: &str, max_visible: usize) -> String {
+    let mut result = String::new();
+    let mut visible = 0;
+    let mut in_escape = false;
+
+    for ch in s.chars() {
+        if ch == '\x1b' {
+            in_escape = true;
+            result.push(ch);
+        } else if in_escape {
+            result.push(ch);
+            if ch == 'm' {
+                in_escape = false;
+            }
+        } else {
+            if visible >= max_visible {
+                result.push_str(&format!("{DIM}…{R}"));
+                break;
+            }
+            result.push(ch);
+            visible += 1;
+        }
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -177,6 +259,11 @@ mod tests {
     fn strip_ansi_len_colored() {
         let colored = format!("{GREEN}hello{R}");
         assert_eq!(strip_ansi_len(&colored), 5);
+    }
+
+    #[test]
+    fn truncate_ansi_short() {
+        assert_eq!(strip_ansi_len(&truncate_ansi("hello world", 5)), 6); // 5 + …
     }
 
     #[test]

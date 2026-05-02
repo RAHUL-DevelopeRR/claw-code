@@ -4191,16 +4191,16 @@ impl LiveCli {
         let mut spinner = Spinner::new();
         let mut stdout = io::stdout();
         let spinner_label = if self.plan_mode {
-            "\u{1f4cb} Planning..."
+            "\x1b[38;2;65;105;195m\u{25E6}\x1b[0m Planning..."
         } else if self.orchestration_mode.is_some() {
             match self.orchestration_mode.as_deref() {
-                Some("divide") => "\u{1f500} Dividing...",
-                Some("chain") => "\u{1f517} Chaining...",
-                Some("power") => "\u{26a1} Power mode...",
-                _ => "\u{1f9e0} Reasoning...",
+                Some("divide") => "\x1b[38;2;240;160;40m\u{25C8}\x1b[0m Dividing...",
+                Some("chain") => "\x1b[38;2;65;105;195m\u{25C9}\x1b[0m Chaining...",
+                Some("power") => "\x1b[38;2;200;50;40m\u{25B8}\x1b[0m Power mode...",
+                _ => "\x1b[38;2;65;105;195m\u{25E6}\x1b[0m Reasoning...",
             }
         } else {
-            "\u{1f9e0} Reasoning..."
+            "\x1b[38;2;65;105;195m\u{25E6}\x1b[0m Reasoning..."
         };
         spinner.tick(
             spinner_label,
@@ -4214,7 +4214,7 @@ impl LiveCli {
             Ok(summary) => {
                 self.replace_runtime(runtime)?;
                 spinner.finish(
-                    "✨ Done",
+                    "\x1b[38;2;45;140;60m\u{2714}\x1b[0m Done",
                     TerminalRenderer::new().color_theme(),
                     &mut stdout,
                 )?;
@@ -4242,7 +4242,7 @@ impl LiveCli {
             Err(error) => {
                 runtime.shutdown_plugins()?;
                 spinner.fail(
-                    "❌ Request failed",
+                    "\x1b[38;2;200;50;40m\u{2717}\x1b[0m Request failed",
                     TerminalRenderer::new().color_theme(),
                     &mut stdout,
                 )?;
@@ -8320,7 +8320,7 @@ fn format_tool_call_start(name: &str, input: &str) -> String {
         "bash" | "Bash" => format_bash_call(&parsed),
         "read_file" | "Read" => {
             let path = extract_tool_path(&parsed);
-            format!("{DIM}📄 Reading {path}…{R}")
+            format!("{ICON_FILE} {DIM}Reading {path}{R}")
         }
         "write_file" | "Write" => {
             let path = extract_tool_path(&parsed);
@@ -8328,7 +8328,7 @@ fn format_tool_call_start(name: &str, input: &str) -> String {
                 .get("content")
                 .and_then(|value| value.as_str())
                 .map_or(0, |content| content.lines().count());
-            format!("{GREEN}{BOLD}✏️ Writing {path}{R} {DIM}({lines} lines){R}")
+            format!("{ICON_WRITE} {GREEN}{BOLD}Writing {path}{R} {DIM}({lines} lines){R}")
         }
         "edit_file" | "Edit" => {
             let path = extract_tool_path(&parsed);
@@ -8343,20 +8343,20 @@ fn format_tool_call_start(name: &str, input: &str) -> String {
                 .and_then(|value| value.as_str())
                 .unwrap_or_default();
             format!(
-                "{ORANGE}{BOLD}📝 Editing {path}{R}{}",
+                "{ICON_EDIT} {ORANGE}{BOLD}Editing {path}{R}{}",
                 format_patch_preview(old_value, new_value)
                     .map(|preview| format!("\n{preview}"))
                     .unwrap_or_default()
             )
         }
-        "glob_search" | "Glob" => format_search_start(&format!("{BLUE}🔎 Glob{R}"), &parsed),
-        "grep_search" | "Grep" => format_search_start(&format!("{BLUE}🔎 Grep{R}"), &parsed),
+        "glob_search" | "Glob" => format_search_start(&format!("{ICON_SEARCH} {BLUE}Glob{R}"), &parsed),
+        "grep_search" | "Grep" => format_search_start(&format!("{ICON_SEARCH} {BLUE}Grep{R}"), &parsed),
         "web_search" | "WebSearch" => {
             let query = parsed
                 .get("query")
                 .and_then(|value| value.as_str())
                 .unwrap_or("?");
-            format!("{ORANGE}🌐 Searching:{R} {query}")
+            format!("{ICON_WEB} {ORANGE}Searching:{R} {query}")
         }
         _ => summarize_tool_payload(input),
     };
@@ -8560,7 +8560,7 @@ fn format_read_result(icon: &str, parsed: &serde_json::Value) -> String {
     let end_line = start_line.saturating_add(num_lines.saturating_sub(1));
 
     format!(
-        "{icon} {DIM}📄 Read {path} (lines {}-{} of {}){R}\n{}",
+        "{icon} {ICON_FILE} {DIM}Read {path} (lines {}-{} of {}){R}\n{}",
         start_line,
         end_line.max(start_line),
         total_lines,
@@ -8580,7 +8580,7 @@ fn format_write_result(icon: &str, parsed: &serde_json::Value) -> String {
         .and_then(|value| value.as_str())
         .map_or(0, |content| content.lines().count());
     format!(
-        "{icon} {GREEN}{BOLD}✏️ {} {path}{R} {DIM}({line_count} lines){R}",
+        "{icon} {ICON_WRITE} {GREEN}{BOLD}{} {path}{R} {DIM}({line_count} lines){R}",
         if kind == "create" { "Wrote" } else { "Updated" },
     )
 }
@@ -8629,8 +8629,8 @@ fn format_edit_result(icon: &str, parsed: &serde_json::Value) -> String {
     });
 
     match preview {
-        Some(preview) => format!("{icon} {ORANGE}{BOLD}📝 Edited {path}{suffix}{R}\n{preview}", ORANGE=crate::brand::ORANGE, BOLD=crate::brand::BOLD, R=crate::brand::R),
-        None => format!("{icon} {ORANGE}{BOLD}📝 Edited {path}{suffix}{R}", ORANGE=crate::brand::ORANGE, BOLD=crate::brand::BOLD, R=crate::brand::R),
+        Some(preview) => format!("{icon} {ICON_EDIT} {ORANGE}{BOLD}Edited {path}{suffix}{R}\n{preview}", ICON_EDIT=crate::brand::ICON_EDIT, ORANGE=crate::brand::ORANGE, BOLD=crate::brand::BOLD, R=crate::brand::R),
+        None => format!("{icon} {ICON_EDIT} {ORANGE}{BOLD}Edited {path}{suffix}{R}", ICON_EDIT=crate::brand::ICON_EDIT, ORANGE=crate::brand::ORANGE, BOLD=crate::brand::BOLD, R=crate::brand::R),
     }
 }
 
