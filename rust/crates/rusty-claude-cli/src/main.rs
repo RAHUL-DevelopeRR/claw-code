@@ -6193,9 +6193,6 @@ fn render_diff_report() -> Result<String, Box<dyn std::error::Error>> {
 }
 
 fn render_diff_report_for(cwd: &Path) -> Result<String, Box<dyn std::error::Error>> {
-    // Verify we are inside a git repository before calling `git diff`.
-    // Running `git diff --cached` outside a git tree produces a misleading
-    // "unknown option `cached`" error because git falls back to --no-index mode.
     let in_git_repo = std::process::Command::new("git")
         .args(["rev-parse", "--is-inside-work-tree"])
         .current_dir(cwd)
@@ -6217,15 +6214,77 @@ fn render_diff_report_for(cwd: &Path) -> Result<String, Box<dyn std::error::Erro
         );
     }
 
-    let mut sections = Vec::new();
+    let mut output = String::new();
+
+    // ── Color codes ─────────────────────────────────────────
+    let r   = "\x1b[0m";       // reset
+    let add = "\x1b[32m";      // green
+    let del = "\x1b[31m";      // red
+    let hdr = "\x1b[1;36m";    // bold cyan (file headers)
+    let hnk = "\x1b[33m";      // yellow (hunk @@ markers)
+    let dim = "\x1b[2m";       // dim (context lines)
+    let bc  = "\x1b[38;2;100;100;100m"; // border gray
+
+    let render_colored_diff = |raw: &str, label: &str| -> String {
+        let mut buf = String::new();
+        let border = format!("{bc}─{r}").repeat(30);
+        buf.push_str(&format!("\n  {hdr}▸ {label}{r}\n  {border}\n"));
+
+        let mut file_count = 0u32;
+        let mut adds = 0u32;
+        let mut dels = 0u32;
+
+        for line in raw.lines() {
+            if line.starts_with("diff --git") {
+                file_count += 1;
+                // Extract filename: "diff --git a/foo.rs b/foo.rs" → "foo.rs"
+                let fname = line
+                    .rsplit(" b/")
+                    .next()
+                    .unwrap_or(line);
+                buf.push_str(&format!("\n  {hdr}━━━ {fname} ━━━{r}\n"));
+            } else if line.starts_with("---") || line.starts_with("+++") {
+                // Skip raw --- a/file / +++ b/file (redundant with above)
+            } else if line.starts_with("@@") {
+                // Hunk header: @@ -10,5 +10,7 @@
+                buf.push_str(&format!("  {hnk}{line}{r}\n"));
+            } else if line.starts_with('+') {
+                adds += 1;
+                buf.push_str(&format!("  {add}{line}{r}\n"));
+            } else if line.starts_with('-') {
+                dels += 1;
+                buf.push_str(&format!("  {del}{line}{r}\n"));
+            } else if line.starts_with('\\') {
+                // "\ No newline at end of file"
+                buf.push_str(&format!("  {dim}{line}{r}\n"));
+            } else if line.starts_with("index ") || line.starts_with("new file")
+                || line.starts_with("deleted file") || line.starts_with("old mode")
+                || line.starts_with("new mode") || line.starts_with("similarity")
+                || line.starts_with("rename") || line.starts_with("Binary")
+            {
+                buf.push_str(&format!("  {dim}{line}{r}\n"));
+            } else {
+                // Context lines (unchanged)
+                buf.push_str(&format!("  {dim} {line}{r}\n"));
+            }
+        }
+
+        // Summary line
+        buf.push_str(&format!(
+            "\n  {bc}─{r} {add}+{adds}{r} {del}-{dels}{r} in {file_count} file{}\n",
+            if file_count == 1 { "" } else { "s" }
+        ));
+        buf
+    };
+
     if !staged.trim().is_empty() {
-        sections.push(format!("Staged changes:\n{}", staged.trim_end()));
+        output.push_str(&render_colored_diff(&staged, "Staged Changes"));
     }
     if !unstaged.trim().is_empty() {
-        sections.push(format!("Unstaged changes:\n{}", unstaged.trim_end()));
+        output.push_str(&render_colored_diff(&unstaged, "Unstaged Changes"));
     }
 
-    Ok(format!("Diff\n\n{}", sections.join("\n\n")))
+    Ok(output)
 }
 
 fn render_diff_json_for(cwd: &Path) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
