@@ -838,6 +838,11 @@ fn find_stream_safe_boundary(markdown: &str) -> Option<usize> {
 
         if line_without_newline.trim().is_empty() {
             last_boundary = Some(offset + line.len());
+        } else if line.ends_with('\n') {
+            // For non-blank lines that end with newline, treat as a valid
+            // split point. This ensures short responses are rendered
+            // incrementally instead of being buffered until flush.
+            last_boundary = Some(offset + line.len());
         }
     }
 

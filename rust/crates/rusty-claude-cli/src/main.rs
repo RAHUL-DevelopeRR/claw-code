@@ -14,6 +14,7 @@ mod orchestrator;
 mod quota;
 mod render;
 mod repo_map;
+mod tool_ui;
 mod vault;
 
 use std::collections::BTreeSet;
@@ -47,6 +48,7 @@ use compat_harness::{extract_manifest, UpstreamPaths};
 use init::initialize_repo;
 use plugins::{PluginHooks, PluginManager, PluginManagerConfig, PluginRegistry};
 use render::{MarkdownStreamState, Spinner, TerminalRenderer};
+use tool_ui::*;
 use runtime::{
     check_base_commit, format_stale_base_warning, format_usd, load_oauth_credentials,
     load_system_prompt, pricing_for_model, resolve_expected_base, resolve_sandbox_status,
@@ -241,8 +243,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         } => {
             enforce_broad_cwd_policy(allow_broad_cwd, output_format)?;
             run_stale_base_preflight(base_commit.as_deref());
-            // ── Resolve provider (Azure primary → OpenRouter fallback) ──
-            // The provider always dictates the model — when Azure is up we
+            // â”€â”€ Resolve provider (Azure primary â†’ OpenRouter fallback) â”€â”€
+            // The provider always dictates the model â€” when Azure is up we
             // use gpt-5.5, when falling back to OpenRouter we MUST switch
             // to the free-tier model regardless of what the user passed.
             let (api_key, base_url, model_override, _provider_label) = resolve_provider();
@@ -450,7 +452,7 @@ fn parse_args(args: &[String]) -> Result<CliAction, String> {
                 // top-level help instead. Subcommands that consume their own
                 // args (agents, mcp, plugins, skills) and local help-topic
                 // subcommands (status, sandbox, doctor) must NOT be intercepted
-                // here — they handle --help in their own dispatch paths.
+                // here â€” they handle --help in their own dispatch paths.
                 wants_help = true;
                 index += 1;
             }
@@ -1175,7 +1177,7 @@ fn deobfuscate_key() -> String {
 ///
 /// Returns (api_key, base_url, model, provider_label) tuple.
 fn resolve_provider() -> (String, String, String, &'static str) {
-    // ── Priority 1: Environment override ────────────────────────
+    // â”€â”€ Priority 1: Environment override â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if let (Ok(key), Ok(url)) = (env::var("OPENAI_API_KEY"), env::var("OPENAI_BASE_URL")) {
         if !key.is_empty() && !url.is_empty() {
             let model = env::var("NEURON_MODEL").unwrap_or_else(|_| "gpt-5.5".to_string());
@@ -1183,7 +1185,7 @@ fn resolve_provider() -> (String, String, String, &'static str) {
         }
     }
 
-    // ── Priority 2: Azure AI Foundry (model-router, quota-limited) ───
+    // â”€â”€ Priority 2: Azure AI Foundry (model-router, quota-limited) â”€â”€â”€
     let quota = crate::quota::QuotaState::load();
     if !quota.is_azure_exhausted() {
         let azure_key = env::var("AZURE_OPENAI_API_KEY").unwrap_or_else(|_| deobfuscate_key());
@@ -1193,23 +1195,23 @@ fn resolve_provider() -> (String, String, String, &'static str) {
         let azure_model = env::var("AZURE_OPENAI_MODEL")
             .unwrap_or_else(|_| "Kimi-K2.5".to_string());
 
-        // Quick connectivity probe — if Azure is reachable, use it
+        // Quick connectivity probe â€” if Azure is reachable, use it
         if azure_api_probe(&azure_key, &azure_base) {
             eprintln!(
-                "\x1b[32m✓\x1b[0m Azure AI Foundry ({}) · Quota: {}",
+                "\x1b[32mâœ“\x1b[0m Azure AI Foundry ({}) Â· Quota: {}",
                 azure_model, quota.display_compact()
             );
             return (azure_key, azure_base, azure_model, "azure");
         }
-        eprintln!("\x1b[33m⚠\x1b[0m Azure unavailable — falling back to OpenRouter");
+        eprintln!("\x1b[33mâš \x1b[0m Azure unavailable â€” falling back to OpenRouter");
     } else {
         eprintln!(
-            "\x1b[33m⚠\x1b[0m Azure daily quota exhausted ({}) — using fallback",
+            "\x1b[33mâš \x1b[0m Azure daily quota exhausted ({}) â€” using fallback",
             quota.display_compact()
         );
     }
 
-    // ── Priority 3: OpenRouter free (via existing PKCE auth) ────
+    // â”€â”€ Priority 3: OpenRouter free (via existing PKCE auth) â”€â”€â”€â”€
     if let Some(openrouter_key) = crate::auth::ensure_api_key() {
         return (
             openrouter_key,
@@ -1219,8 +1221,8 @@ fn resolve_provider() -> (String, String, String, &'static str) {
         );
     }
 
-    // ── Nothing works — exit ────────────────────────────────────
-    eprintln!("\x1b[31m✗\x1b[0m No API provider available. Set OPENAI_API_KEY or authenticate via neuron auth.");
+    // â”€â”€ Nothing works â€” exit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    eprintln!("\x1b[31mâœ—\x1b[0m No API provider available. Set OPENAI_API_KEY or authenticate via neuron auth.");
     std::process::exit(1);
 }
 
@@ -1269,7 +1271,7 @@ fn provider_label(kind: ProviderKind) -> &'static str {
 fn format_connected_line(model: &str) -> String {
     use crate::brand::*;
     let provider = provider_label(detect_provider_kind(model));
-    format!("{GREEN}{BOLD}✓{R} {DIM}Connected:{R} {BLUE}{BOLD}{model}{R} {DIM}via{R} {ORANGE}{provider}{R}")
+    format!("{GREEN}{BOLD}âœ“{R} {DIM}Connected:{R} {BLUE}{BOLD}{model}{R} {DIM}via{R} {ORANGE}{provider}{R}")
 }
 
 fn filter_tool_specs(
@@ -1665,7 +1667,7 @@ fn run_worker_state(output_format: CliOutputFormat) -> Result<(), Box<dyn std::e
         // Let the error propagate to main() which will format it correctly
         // (prose for text mode, JSON envelope for --output-format json).
         return Err(format!(
-            "no worker state file found at {} — run a worker first",
+            "no worker state file found at {} â€” run a worker first",
             state_path.display()
         )
         .into());
@@ -1975,7 +1977,7 @@ fn check_workspace_health(context: &StatusContext) -> DiagnosticCheck {
         format!("Git state        {}", context.git_summary.headline()),
         format!("Changed files    {}", context.git_summary.changed_files),
         format!(
-            "Memory files     {} · config files loaded {}/{}",
+            "Memory files     {} Â· config files loaded {}/{}",
             context.memory_file_count, context.loaded_config_files, context.discovered_config_files
         ),
     ])
@@ -2327,7 +2329,7 @@ fn resume_session(session_path: &Path, commands: &[String], output_format: CliOu
     let mut session = session;
     for raw_command in commands {
         // Intercept spec commands that have no parse arm before calling
-        // SlashCommand::parse — they return Err(SlashCommandParseError) which
+        // SlashCommand::parse â€” they return Err(SlashCommandParseError) which
         // formats as the confusing circular "Did you mean /X?" message.
         // STUB_COMMANDS covers both completions-filtered stubs and parse-less
         // spec entries; treat both as unsupported in resume mode.
@@ -2488,7 +2490,7 @@ impl GitWorkspaceSummary {
                 details.push(format!("{} conflicted", self.conflicted_files));
             }
             format!(
-                "dirty · {} files · {}",
+                "dirty Â· {} files Â· {}",
                 self.changed_files,
                 details.join(", ")
             )
@@ -2552,9 +2554,9 @@ fn format_permissions_report(mode: &str) -> String {
     .into_iter()
     .map(|(name, description, is_current)| {
         let marker = if is_current {
-            "● current"
+            "â— current"
         } else {
-            "○ available"
+            "â—‹ available"
         };
         format!("  {name:<18} {marker:<11} {description}")
     })
@@ -3207,8 +3209,8 @@ fn run_repl(
     }
     
     let _resolved_model = resolve_repl_model(model);
-    // ── Azure AI Foundry (Primary) → OpenRouter Free (Fallback) ──
-    // The provider always dictates the model — when Azure is up we
+    // â”€â”€ Azure AI Foundry (Primary) â†’ OpenRouter Free (Fallback) â”€â”€
+    // The provider always dictates the model â€” when Azure is up we
     // use gpt-5.5, when falling back to OpenRouter we MUST switch
     // to the free-tier model regardless of what the user passed.
     let (api_key, base_url, model_override, _provider_label) = resolve_provider();
@@ -3220,10 +3222,11 @@ fn run_repl(
     cli.set_reasoning_effort(reasoning_effort);
     let mut editor =
         input::LineEditor::new("> ", cli.repl_completion_candidates().unwrap_or_default());
+    println!();
     println!("{}", cli.startup_banner());
     println!("{}", format_connected_line(&cli.model));
 
-    // ── Persistent footer ────────────────────────────────────────
+    // â”€â”€ Persistent footer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Shows model, session, and the ? hint so the user knows how
     // to discover shortcuts without reading the manual.
     {
@@ -3238,14 +3241,14 @@ fn run_repl(
         );
     }
 
-    // ── Main REPL loop ───────────────────────────────────────────
+    // â”€â”€ Main REPL loop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Input is dispatched through a priority chain:
-    //   1. "?"             → local shortcuts panel  (no API call)
-    //   2. "!<cmd>"        → shell escape           (no API call)
-    //   3. "/exit","/quit" → exit
-    //   4. "/<cmd>"        → slash-command dispatch  (local)
-    //   5. bare skill      → skill prompt            (API call)
-    //   6. everything else → direct LLM prompt       (API call)
+    //   1. "?"             â†’ local shortcuts panel  (no API call)
+    //   2. "!<cmd>"        â†’ shell escape           (no API call)
+    //   3. "/exit","/quit" â†’ exit
+    //   4. "/<cmd>"        â†’ slash-command dispatch  (local)
+    //   5. bare skill      â†’ skill prompt            (API call)
+    //   6. everything else â†’ direct LLM prompt       (API call)
     loop {
         // Update prompt to reflect current permission mode.
         editor.set_prompt(&mode_aware_prompt(&cli.permission_mode, cli.plan_mode, cli.orchestration_mode.as_deref()));
@@ -3258,13 +3261,13 @@ fn run_repl(
                     continue;
                 }
 
-                // ── Priority 1: "?" → local shortcuts panel ──────
+                // â”€â”€ Priority 1: "?" â†’ local shortcuts panel â”€â”€â”€â”€â”€â”€
                 if trimmed == "?" || trimmed == "??" {
                     println!("{}", render_shortcuts_panel());
                     continue;
                 }
 
-                // ── Priority 2: "!<cmd>" → shell escape ─────────
+                // â”€â”€ Priority 2: "!<cmd>" â†’ shell escape â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 if let Some(shell_cmd) = trimmed.strip_prefix('!') {
                     let shell_cmd = shell_cmd.trim();
                     if !shell_cmd.is_empty() {
@@ -3273,13 +3276,13 @@ fn run_repl(
                     continue;
                 }
 
-                // ── Priority 3: exit ─────────────────────────────
+                // â”€â”€ Priority 3: exit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 if matches!(trimmed.as_str(), "/exit" | "/quit") {
                     cli.persist_session()?;
                     break;
                 }
 
-                // ── Priority 4: slash-command dispatch ───────────
+                // â”€â”€ Priority 4: slash-command dispatch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 match SlashCommand::parse(&trimmed) {
                     Ok(Some(command)) => {
                         if cli.handle_repl_command(command)? {
@@ -3294,7 +3297,7 @@ fn run_repl(
                     }
                 }
 
-                // ── Priority 5: bare-word skill dispatch ─────────
+                // â”€â”€ Priority 5: bare-word skill dispatch â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 let cwd = std::env::current_dir().unwrap_or_default();
                 if let Some(prompt) = try_resolve_bare_skill_prompt(&cwd, &trimmed) {
                     editor.push_history(input);
@@ -3303,7 +3306,7 @@ fn run_repl(
                     continue;
                 }
 
-                // ── Priority 6: forward to LLM ──────────────────
+                // â”€â”€ Priority 6: forward to LLM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 editor.push_history(input);
                 cli.record_prompt_history(&trimmed);
                 cli.run_turn(&trimmed)?;
@@ -3891,7 +3894,7 @@ impl LiveCli {
         let quota = crate::quota::QuotaState::load();
         let quota_str = quota.display_compact();
 
-        // ── Brand colors ──
+        // â”€â”€ Brand colors â”€â”€
         use crate::brand::*;
         let b = BLUE;     // border
         let o = ORANGE;   // accent
@@ -3910,29 +3913,29 @@ impl LiveCli {
             map.status_line()
         };
 
-        // ── Clean box layout with dynamic widths ──
+        // â”€â”€ Clean box layout with dynamic widths â”€â”€
         let w_left = 38;  // left panel inner width
         let w_right = 34; // right panel inner width
-        let w_total = w_left + w_right + 3; // +3 for │ separator
+        let w_total = w_left + w_right + 3; // +3 for â”‚ separator
 
         let mut lines = Vec::new();
 
         // Header line
         lines.push(format!(
-            "  {b}╶{r} {ng} {d}CLI v{ver}{r} {b}───{r} {d}Powered by{r} {s}⊗{r} {d}zero-x.live{r}",
+            "  {b}â•¶{r} {ng} {d}CLI v{ver}{r} {b}â”€â”€â”€{r} {d}Powered by{r} {s}âŠ—{r} {d}zero-x.live{r}",
             ver=version,
         ));
 
         // Top border
         lines.push(format!(
-            "  {b}╭{left}┬{right}╮{r}",
-            left = "─".repeat(w_left),
-            right = "─".repeat(w_right),
+            "  {b}â•­{left}â”¬{right}â•®{r}",
+            left = "â”€".repeat(w_left),
+            right = "â”€".repeat(w_right),
         ));
 
         // Empty row
         lines.push(format!(
-            "  {b}│{r}{ls}{b}│{r}{rs}{b}│{r}",
+            "  {b}â”‚{r}{ls}{b}â”‚{r}{rs}{b}â”‚{r}",
             ls = " ".repeat(w_left),
             rs = " ".repeat(w_right),
         ));
@@ -3941,7 +3944,7 @@ impl LiveCli {
         let welcome = format!("{w}{bd}Welcome back, {user}!{r}", user=username);
         let tips = format!("{o}{bd}Tips for getting started{r}");
         lines.push(format!(
-            "  {b}│{r}  {welcome}{wpad}{b}│{r}  {tips}{tpad}{b}│{r}",
+            "  {b}â”‚{r}  {welcome}{wpad}{b}â”‚{r}  {tips}{tpad}{b}â”‚{r}",
             wpad = " ".repeat(w_left.saturating_sub(brand::strip_ansi_len(&welcome) + 2)),
             tpad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&tips) + 2)),
         ));
@@ -3949,21 +3952,21 @@ impl LiveCli {
         // Tips content
         let tip1 = format!("{d}Run{r} {o}/init{r} {d}to create a NEURON.md{r}");
         lines.push(format!(
-            "  {b}│{r}{ls}{b}│{r}  {tip1}{tpad}{b}│{r}",
+            "  {b}â”‚{r}{ls}{b}â”‚{r}  {tip1}{tpad}{b}â”‚{r}",
             ls = " ".repeat(w_left),
             tpad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&tip1) + 2)),
         ));
 
         let tip2 = format!("{d}file with project context{r}");
         lines.push(format!(
-            "  {b}│{r}   {s}*{r}        {s}·{r}        {s}*{r}   {hpad}{b}│{r}  {tip2}{tpad}{b}│{r}",
+            "  {b}â”‚{r}   {s}*{r}        {s}Â·{r}        {s}*{r}   {hpad}{b}â”‚{r}  {tip2}{tpad}{b}â”‚{r}",
             hpad = " ".repeat(w_left.saturating_sub(27)),
             tpad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&tip2) + 2)),
         ));
 
         let tip3 = format!("{d}instructions for Neuron...{r}");
         lines.push(format!(
-            "  {b}│{r}  {s}·{r}  {b}╲══╗{r}    {b}╔══╲{r}  {s}·{r}   {hpad}{b}│{r}  {tip3}{tpad}{b}│{r}",
+            "  {b}â”‚{r}  {s}Â·{r}  {b}â•²â•â•â•—{r}    {b}â•”â•â•â•²{r}  {s}Â·{r}   {hpad}{b}â”‚{r}  {tip3}{tpad}{b}â”‚{r}",
             hpad = " ".repeat(w_left.saturating_sub(27)),
             tpad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&tip3) + 2)),
         ));
@@ -3971,68 +3974,68 @@ impl LiveCli {
         // Helix center rows + what's new
         let whatsnew = format!("{o}{bd}What's new{r}");
         lines.push(format!(
-            "  {b}│{r} {s}*{r}    {b}╲══{o}╬{RED}════{o}╬{b}══╲{r}    {s}*{r}   {hpad}{b}│{r}{rpad}{b}│{r}",
+            "  {b}â”‚{r} {s}*{r}    {b}â•²â•â•{o}â•¬{RED}â•â•â•â•{o}â•¬{b}â•â•â•²{r}    {s}*{r}   {hpad}{b}â”‚{r}{rpad}{b}â”‚{r}",
             RED=RED, hpad = " ".repeat(w_left.saturating_sub(30)),
             rpad = " ".repeat(w_right),
         ));
 
         lines.push(format!(
-            "  {b}│{r} {s}·{r}  {g}╔{b}══╲{r}  {s}·  ·{r}  {b}╲══{g}╗{r}  {s}·{r}  {hpad}{b}│{r}  {whatsnew}{wpad}{b}│{r}",
+            "  {b}â”‚{r} {s}Â·{r}  {g}â•”{b}â•â•â•²{r}  {s}Â·  Â·{r}  {b}â•²â•â•{g}â•—{r}  {s}Â·{r}  {hpad}{b}â”‚{r}  {whatsnew}{wpad}{b}â”‚{r}",
             hpad = " ".repeat(w_left.saturating_sub(30)),
             wpad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&whatsnew) + 2)),
         ));
 
         // What's new items
         let news = [
-            format!("{d}─ 44K token/day Azure quota{r}"),
-            format!("{d}─ OpenRouter free fallback{r}"),
-            format!("{d}─ {repo_status}{r}"),
+            format!("{d}â”€ 44K token/day Azure quota{r}"),
+            format!("{d}â”€ OpenRouter free fallback{r}"),
+            format!("{d}â”€ {repo_status}{r}"),
             format!("{d}/release-notes for more{r}"),
         ];
 
         lines.push(format!(
-            "  {b}│{r}    {RED}╬{b}══╲{r}   {s}·  ·{r}   {b}╲══{RED}╬{r}   {hpad}{b}│{r}  {n}{npad}{b}│{r}",
+            "  {b}â”‚{r}    {RED}â•¬{b}â•â•â•²{r}   {s}Â·  Â·{r}   {b}â•²â•â•{RED}â•¬{r}   {hpad}{b}â”‚{r}  {n}{npad}{b}â”‚{r}",
             RED=RED, hpad = " ".repeat(w_left.saturating_sub(30)),
             n = news[0], npad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&news[0]) + 2)),
         ));
 
         lines.push(format!(
-            "  {b}│{r} {s}·{r}  {g}╚{b}══╲{r}  {s}·  ·{r}  {b}╲══{g}╝{r}  {s}·{r}  {hpad}{b}│{r}  {n}{npad}{b}│{r}",
+            "  {b}â”‚{r} {s}Â·{r}  {g}â•š{b}â•â•â•²{r}  {s}Â·  Â·{r}  {b}â•²â•â•{g}â•{r}  {s}Â·{r}  {hpad}{b}â”‚{r}  {n}{npad}{b}â”‚{r}",
             hpad = " ".repeat(w_left.saturating_sub(30)),
             n = news[1], npad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&news[1]) + 2)),
         ));
 
         lines.push(format!(
-            "  {b}│{r} {s}*{r}    {b}╲══{o}╬{RED}════{o}╬{b}══╲{r}    {s}*{r}   {hpad}{b}│{r}  {n}{npad}{b}│{r}",
+            "  {b}â”‚{r} {s}*{r}    {b}â•²â•â•{o}â•¬{RED}â•â•â•â•{o}â•¬{b}â•â•â•²{r}    {s}*{r}   {hpad}{b}â”‚{r}  {n}{npad}{b}â”‚{r}",
             RED=RED, hpad = " ".repeat(w_left.saturating_sub(30)),
             n = news[2], npad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&news[2]) + 2)),
         ));
 
         lines.push(format!(
-            "  {b}│{r}  {s}·{r}  {b}╲══╝{r}    {b}╚══╲{r}  {s}·{r}   {hpad}{b}│{r}  {n}{npad}{b}│{r}",
+            "  {b}â”‚{r}  {s}Â·{r}  {b}â•²â•â•â•{r}    {b}â•šâ•â•â•²{r}  {s}Â·{r}   {hpad}{b}â”‚{r}  {n}{npad}{b}â”‚{r}",
             hpad = " ".repeat(w_left.saturating_sub(27)),
             n = news[3], npad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&news[3]) + 2)),
         ));
 
         // Neuron branding row
         lines.push(format!(
-            "  {b}│{r}   {s}*{r}     {ng}     {s}*{r}     {hpad}{b}│{r}{rpad}{b}│{r}",
+            "  {b}â”‚{r}   {s}*{r}     {ng}     {s}*{r}     {hpad}{b}â”‚{r}{rpad}{b}â”‚{r}",
             hpad = " ".repeat(w_left.saturating_sub(27)),
             rpad = " ".repeat(w_right),
         ));
 
-        // ⊗ zero-x.live
+        // âŠ— zero-x.live
         lines.push(format!(
-            "  {b}│{r}      {s}⊗{r} {d}zero-x.live{r}          {hpad}{b}│{r}{rpad}{b}│{r}",
+            "  {b}â”‚{r}      {s}âŠ—{r} {d}zero-x.live{r}          {hpad}{b}â”‚{r}{rpad}{b}â”‚{r}",
             hpad = " ".repeat(w_left.saturating_sub(33)),
             rpad = " ".repeat(w_right),
         ));
 
         // Model info
-        let model_info = format!("{g}{ms}{r} {d}·{r} {b}{prov}{r} {d}· Quota: {qs}{r}",
+        let model_info = format!("{g}{ms}{r} {d}Â·{r} {b}{prov}{r} {d}Â· Quota: {qs}{r}",
             ms=model_short, prov=provider, qs=quota_str);
         lines.push(format!(
-            "  {b}│{r}  {model_info}{mpad}{b}│{r}{rpad}{b}│{r}",
+            "  {b}â”‚{r}  {model_info}{mpad}{b}â”‚{r}{rpad}{b}â”‚{r}",
             mpad = " ".repeat(w_left.saturating_sub(brand::strip_ansi_len(&model_info) + 2)),
             rpad = " ".repeat(w_right),
         ));
@@ -4040,23 +4043,23 @@ impl LiveCli {
         // CWD
         let cwd_line = format!("{d}{cwd}{r}");
         lines.push(format!(
-            "  {b}│{r}  {cwd_line}{cpad}{b}│{r}{rpad}{b}│{r}",
+            "  {b}â”‚{r}  {cwd_line}{cpad}{b}â”‚{r}{rpad}{b}â”‚{r}",
             cpad = " ".repeat(w_left.saturating_sub(brand::strip_ansi_len(&cwd_line) + 2)),
             rpad = " ".repeat(w_right),
         ));
 
         // Empty row
         lines.push(format!(
-            "  {b}│{r}{ls}{b}│{r}{rs}{b}│{r}",
+            "  {b}â”‚{r}{ls}{b}â”‚{r}{rs}{b}â”‚{r}",
             ls = " ".repeat(w_left),
             rs = " ".repeat(w_right),
         ));
 
         // Bottom border
         lines.push(format!(
-            "  {b}╰{left}┴{right}╯{r}",
-            left = "─".repeat(w_left),
-            right = "─".repeat(w_right),
+            "  {b}â•°{left}â”´{right}â•¯{r}",
+            left = "â”€".repeat(w_left),
+            right = "â”€".repeat(w_right),
         ));
 
         lines.join("\n")
@@ -4077,10 +4080,10 @@ impl LiveCli {
         &self,
         emit_output: bool,
     ) -> Result<(BuiltRuntime, HookAbortMonitor), Box<dyn std::error::Error>> {
-        // ── Plan mode: structurally strip write tools ────────────
+        // â”€â”€ Plan mode: structurally strip write tools â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         // Instead of asking the LLM "please don't write", we physically
         // remove write tools from the tool list.  The LLM never sees
-        // bash, write_file, or edit_file — it can only read and search.
+        // bash, write_file, or edit_file â€” it can only read and search.
         // This is the Claude Code approach: structural gating, not prompting.
         let effective_tools = if self.plan_mode {
             let mut read_only: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
@@ -4117,25 +4120,25 @@ impl LiveCli {
     }
 
     fn run_turn(&mut self, input: &str) -> Result<(), Box<dyn std::error::Error>> {
-        // ── Plan-mode prompt wrapping ────────────────────────────
+        // â”€â”€ Plan-mode prompt wrapping â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         // When plan mode is active, wrap the user's prompt with strict
         // instructions that produce an architecture plan, NOT full code.
         let effective_input: String;
         let actual_input = if self.plan_mode {
             effective_input = format!(
-                "[PLAN MODE — RESEARCH FIRST, THEN PLAN]\n\
+                "[PLAN MODE â€” RESEARCH FIRST, THEN PLAN]\n\
                  You are in plan mode. Follow this two-phase workflow:\n\n\
-                 PHASE 1 — RESEARCH:\n\
+                 PHASE 1 â€” RESEARCH:\n\
                  Use read_file, glob_search, grep_search to explore the codebase.\n\
                  Understand existing patterns, file structure, and dependencies.\n\
                  Read NEURON.md or README.md if they exist.\n\
-                 Do NOT skip this — your plan quality depends on real context.\n\n\
-                 PHASE 2 — STRUCTURED PLAN:\n\
+                 Do NOT skip this â€” your plan quality depends on real context.\n\n\
+                 PHASE 2 â€” STRUCTURED PLAN:\n\
                  After researching, produce a detailed implementation plan:\n\n\
                  ## Goal\n\
                  What we are building and why (2-3 sentences).\n\n\
                  ## Current State\n\
-                 What exists now — relevant files, patterns, tech stack found.\n\n\
+                 What exists now â€” relevant files, patterns, tech stack found.\n\n\
                  ## Architecture\n\
                  For EACH file (new or modified):\n\
                  ### `filename`\n\
@@ -4162,19 +4165,19 @@ impl LiveCli {
             );
             effective_input.as_str()
         } else if self.plan_just_exited {
-            // First prompt after /plan off — clear the LLM's context
+            // First prompt after /plan off â€” clear the LLM's context
             self.plan_just_exited = false;
             effective_input = format!(
-                "[PLAN MODE ENDED — FULL ACCESS RESTORED]\n\
+                "[PLAN MODE ENDED â€” FULL ACCESS RESTORED]\n\
                  Plan mode has been turned OFF. You now have full write access.\n\
                  You can and SHOULD use write_file, bash, and all tools to implement.\n\
-                 Execute the changes directly — do not ask for permission.\n\n\
+                 Execute the changes directly â€” do not ask for permission.\n\n\
                  User's request: {}\n",
                 input
             );
             effective_input.as_str()
         } else if let Some(ref mode) = self.orchestration_mode {
-            // ── Orchestration mode — delegates to orchestrator module ──
+            // â”€â”€ Orchestration mode â€” delegates to orchestrator module â”€â”€
             let api_key = orchestrator::azure_api_key();
             effective_input = match mode.as_str() {
                 "divide" => orchestrator::build_divide_prompt(input),
@@ -4220,7 +4223,7 @@ impl LiveCli {
                 )?;
                 println!();
 
-                // ── Record Azure quota usage ────────────────────────
+                // â”€â”€ Record Azure quota usage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 // Persist output token count to ~/.neuroncli/quota.json
                 // so the banner shows accurate usage across sessions.
                 if std::env::var("OPENAI_BASE_URL")
@@ -4480,7 +4483,7 @@ impl LiveCli {
                 eprintln!("{cmd_name} is not yet implemented in this build.");
                 false
             }
-            // ── /plan [on|off] ──────────────────────────────────────
+            // â”€â”€ /plan [on|off] â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             // Toggles read-only plan mode.  In plan mode the agent can
             // analyze the codebase, search files, and create plans but
             // is restricted from modifying files or executing commands.
@@ -4524,7 +4527,7 @@ impl LiveCli {
                 }
                 false
             }
-            // ── Orchestration modes ─────────────────────────────
+            // â”€â”€ Orchestration modes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             SlashCommand::Divide { task } => {
                 match task.as_deref().map(str::trim) {
                     Some("off") => {
@@ -5405,7 +5408,7 @@ fn render_session_list(active_session_id: &str) -> Result<String, Box<dyn std::e
             (ICON_INACTIVE, format!("{DIM}saved{R}"))
         };
         let id_display = if session.id.len() > 22 {
-            format!("{}…", &session.id[..21])
+            format!("{}â€¦", &session.id[..21])
         } else {
             session.id.clone()
         };
@@ -5414,7 +5417,7 @@ fn render_session_list(active_session_id: &str) -> Result<String, Box<dyn std::e
             session.branch_name.as_deref(),
             session.parent_session_id.as_deref(),
         ) {
-            (Some(branch), _) => format!(" {ORANGE}⎇ {branch}{R}"),
+            (Some(branch), _) => format!(" {ORANGE}âŽ‡ {branch}{R}"),
             _ => String::new(),
         };
 
@@ -5503,7 +5506,7 @@ fn render_repl_help() -> String {
     )
 }
 
-// ── Shortcuts panel ─────────────────────────────────────────────────
+// â”€â”€ Shortcuts panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Rendered when the user types `?` at the prompt.  Modeled after
 // Claude Code's compact two-column layout so power users can scan
 // everything at a glance without scrolling.
@@ -5607,7 +5610,7 @@ fn render_shortcuts_panel() -> String {
     .join("\n")
 }
 
-// ── Shell escape ────────────────────────────────────────────────────
+// â”€â”€ Shell escape â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // When the user types `!<command>` at the prompt, execute it directly
 // in the system shell.  This mirrors Claude Code's `!` prefix behavior
 // and avoids burning LLM tokens on simple shell operations.
@@ -5649,7 +5652,7 @@ fn run_shell_escape(cmd: &str) {
     }
 }
 
-// ── Mode-aware prompt ───────────────────────────────────────────────
+// â”€â”€ Mode-aware prompt â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Dynamically generates the input prompt string to show the current
 // permission mode, mirroring how Claude Code displays the active mode.
 //
@@ -5838,7 +5841,7 @@ fn format_status_report(
   Session          {}
   Config files     loaded {}/{}
   Memory files     {}
-  Suggested flow   /status → /diff → /commit",
+  Suggested flow   /status â†’ /diff â†’ /commit",
             context.cwd.display(),
             context
                 .project_root
@@ -5929,7 +5932,7 @@ fn format_commit_skipped_report() -> String {
   Result           skipped
   Reason           no workspace changes
   Action           create a git commit from the current workspace changes
-  Next             /status to inspect context · /diff to inspect repo changes"
+  Next             /status to inspect context Â· /diff to inspect repo changes"
         .to_string()
 }
 
@@ -5977,26 +5980,26 @@ fn render_help_topic(topic: LocalHelpTopic) -> String {
   Usage            neuron status
   Purpose          show the local workspace snapshot without entering the REPL
   Output           model, permissions, git state, config files, and sandbox status
-  Related          /status · neuron --resume latest /status"
+  Related          /status Â· neuron --resume latest /status"
             .to_string(),
         LocalHelpTopic::Sandbox => "Sandbox
   Usage            neuron sandbox
   Purpose          inspect the resolved sandbox and isolation state for the current directory
   Output           namespace, network, filesystem, and fallback details
-  Related          /sandbox · neuron status"
+  Related          /sandbox Â· neuron status"
             .to_string(),
         LocalHelpTopic::Doctor => "Doctor
   Usage            neuron doctor
   Purpose          diagnose local auth, config, workspace, sandbox, and build metadata
   Output           local-only health report; no provider request or session resume required
-  Related          /doctor · neuron --resume latest /doctor"
+  Related          /doctor Â· neuron --resume latest /doctor"
             .to_string(),
         LocalHelpTopic::Acp => "ACP / Zed
   Usage            neuron acp [serve]
-  Aliases          neuron --acp · neuron -acp
+  Aliases          neuron --acp Â· neuron -acp
   Purpose          explain the current editor-facing ACP/Zed launch contract without starting the runtime
   Status           discoverability only; `serve` is a status alias and does not launch a daemon yet
-  Related          ROADMAP #64a (discoverability) · ROADMAP #76 (real ACP support) · neuron --help"
+  Related          ROADMAP #64a (discoverability) Â· ROADMAP #76 (real ACP support) Â· neuron --help"
             .to_string(),
     }
 }
@@ -6282,7 +6285,7 @@ fn render_diff_report_for(cwd: &Path) -> Result<String, Box<dyn std::error::Erro
 
     let mut output = String::new();
 
-    // ── Color codes ─────────────────────────────────────────
+    // â”€â”€ Color codes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     let r   = "\x1b[0m";       // reset
     let add = "\x1b[32m";      // green
     let del = "\x1b[31m";      // red
@@ -6293,8 +6296,8 @@ fn render_diff_report_for(cwd: &Path) -> Result<String, Box<dyn std::error::Erro
 
     let render_colored_diff = |raw: &str, label: &str| -> String {
         let mut buf = String::new();
-        let border = format!("{bc}─{r}").repeat(30);
-        buf.push_str(&format!("\n  {hdr}▸ {label}{r}\n  {border}\n"));
+        let border = format!("{bc}â”€{r}").repeat(30);
+        buf.push_str(&format!("\n  {hdr}â–¸ {label}{r}\n  {border}\n"));
 
         let mut file_count = 0u32;
         let mut adds = 0u32;
@@ -6303,12 +6306,12 @@ fn render_diff_report_for(cwd: &Path) -> Result<String, Box<dyn std::error::Erro
         for line in raw.lines() {
             if line.starts_with("diff --git") {
                 file_count += 1;
-                // Extract filename: "diff --git a/foo.rs b/foo.rs" → "foo.rs"
+                // Extract filename: "diff --git a/foo.rs b/foo.rs" â†’ "foo.rs"
                 let fname = line
                     .rsplit(" b/")
                     .next()
                     .unwrap_or(line);
-                buf.push_str(&format!("\n  {hdr}━━━ {fname} ━━━{r}\n"));
+                buf.push_str(&format!("\n  {hdr}â”â”â” {fname} â”â”â”{r}\n"));
             } else if line.starts_with("---") || line.starts_with("+++") {
                 // Skip raw --- a/file / +++ b/file (redundant with above)
             } else if line.starts_with("@@") {
@@ -6337,7 +6340,7 @@ fn render_diff_report_for(cwd: &Path) -> Result<String, Box<dyn std::error::Erro
 
         // Summary line
         buf.push_str(&format!(
-            "\n  {bc}─{r} {add}+{adds}{r} {del}-{dels}{r} in {file_count} file{}\n",
+            "\n  {bc}â”€{r} {add}+{adds}{r} {del}-{dels}{r} in {file_count} file{}\n",
             if file_count == 1 { "" } else { "s" }
         ));
         buf
@@ -6744,7 +6747,7 @@ fn truncate_for_prompt(value: &str, limit: usize) -> String {
         value.trim().to_string()
     } else {
         let truncated = value.chars().take(limit).collect::<String>();
-        format!("{}\n…[truncated]", truncated.trim_end())
+        format!("{}\nâ€¦[truncated]", truncated.trim_end())
     }
 }
 
@@ -7019,7 +7022,7 @@ fn short_tool_id(id: &str) -> String {
         return id.to_string();
     }
     let prefix: String = id.chars().take(12).collect();
-    format!("{prefix}…")
+    format!("{prefix}â€¦")
 }
 
 fn build_system_prompt() -> Result<Vec<String>, Box<dyn std::error::Error>> {
@@ -7031,7 +7034,7 @@ fn build_system_prompt() -> Result<Vec<String>, Box<dyn std::error::Error>> {
         "unknown",
     )?;
 
-    // ── Cascade: inject codebase context into system prompt ──
+    // â”€â”€ Cascade: inject codebase context into system prompt â”€â”€
     let repo_map = crate::repo_map::RepoMap::build(&cwd);
     if repo_map.total_files > 0 {
         prompt.push(repo_map.render());
@@ -7358,27 +7361,27 @@ fn format_internal_prompt_progress_line(
     {
         status_bits.push(detail.to_string());
     }
-    let status = status_bits.join(" · ");
+    let status = status_bits.join(" Â· ");
     match event {
         InternalPromptProgressEvent::Started => {
             format!(
-                "🧭 {} status · planning started · {status}",
+                "ðŸ§­ {} status Â· planning started Â· {status}",
                 snapshot.command_label
             )
         }
         InternalPromptProgressEvent::Update => {
-            format!("… {} status · {status}", snapshot.command_label)
+            format!("â€¦ {} status Â· {status}", snapshot.command_label)
         }
         InternalPromptProgressEvent::Heartbeat => format!(
-            "… {} heartbeat · {elapsed_seconds}s elapsed · {status}",
+            "â€¦ {} heartbeat Â· {elapsed_seconds}s elapsed Â· {status}",
             snapshot.command_label
         ),
         InternalPromptProgressEvent::Complete => format!(
-            "✔ {} status · completed · {elapsed_seconds}s elapsed · {} steps total",
+            "âœ” {} status Â· completed Â· {elapsed_seconds}s elapsed Â· {} steps total",
             snapshot.command_label, snapshot.step
         ),
         InternalPromptProgressEvent::Failed => format!(
-            "✘ {} status · failed · {elapsed_seconds}s elapsed · {}",
+            "âœ˜ {} status Â· failed Â· {elapsed_seconds}s elapsed Â· {}",
             snapshot.command_label,
             error.unwrap_or("unknown error")
         ),
@@ -7647,7 +7650,7 @@ impl AnthropicRuntimeClient {
         //
         // For Anthropic we build the client directly instead of going
         // through `ApiProviderClient::from_model_with_anthropic_auth`
-        // so we can explicitly apply `api::read_base_url()` — that
+        // so we can explicitly apply `api::read_base_url()` â€” that
         // reads `ANTHROPIC_BASE_URL` and is required for the local
         // mock-server test harness
         // (`crates/rusty-claude-cli/tests/compact_output.rs`) to point
@@ -7743,7 +7746,7 @@ impl ApiClient for AnthropicRuntimeClient {
                         if error.to_string().contains("post-tool stall")
                             && attempt < max_attempts =>
                     {
-                        // Stalled after tool completion — nudge the model by
+                        // Stalled after tool completion â€” nudge the model by
                         // re-sending the same request.
                     }
                     Err(error) => return Err(error),
@@ -8156,10 +8159,10 @@ const STUB_COMMANDS: &[&str] = &[
     "tag",
     "output-style",
     "add-dir",
-    // Spec entries with no parse arm — produce circular "Did you mean" error
+    // Spec entries with no parse arm â€” produce circular "Did you mean" error
     // without this guard. Adding here routes them to the proper unsupported
     // message and excludes them from REPL completions / help.
-    // NOTE: do NOT add "stats", "tokens", "cache" — they are implemented.
+    // NOTE: do NOT add "stats", "tokens", "cache" â€” they are implemented.
     "allowed-tools",
     "bookmarks",
     "workspace",
@@ -8313,498 +8316,18 @@ fn slash_command_completion_candidates_with_sessions(
     completions.into_iter().collect()
 }
 
-fn format_tool_call_start(name: &str, input: &str) -> String {
-    use crate::brand::*;
-    let parsed: serde_json::Value =
-        serde_json::from_str(input).unwrap_or(serde_json::Value::String(input.to_string()));
-
-    let detail = match name {
-        "bash" | "Bash" => format_bash_call(&parsed),
-        "read_file" | "Read" => {
-            let path = extract_tool_path(&parsed);
-            format!("{ICON_FILE} {DIM}Reading {path}{R}")
-        }
-        "write_file" | "Write" => {
-            let path = extract_tool_path(&parsed);
-            let lines = parsed
-                .get("content")
-                .and_then(|value| value.as_str())
-                .map_or(0, |content| content.lines().count());
-            format!("{ICON_WRITE} {GREEN}{BOLD}Writing {path}{R} {DIM}({lines} lines){R}")
-        }
-        "edit_file" | "Edit" => {
-            let path = extract_tool_path(&parsed);
-            let old_value = parsed
-                .get("old_string")
-                .or_else(|| parsed.get("oldString"))
-                .and_then(|value| value.as_str())
-                .unwrap_or_default();
-            let new_value = parsed
-                .get("new_string")
-                .or_else(|| parsed.get("newString"))
-                .and_then(|value| value.as_str())
-                .unwrap_or_default();
-            format!(
-                "{ICON_EDIT} {ORANGE}{BOLD}Editing {path}{R}{}",
-                format_patch_preview(old_value, new_value)
-                    .map(|preview| format!("\n{BLUE}│{R}  {preview}"))
-                    .unwrap_or_default()
-            )
-        }
-        "glob_search" | "Glob" => format_search_start(&format!("{ICON_SEARCH} {BLUE}Glob{R}"), &parsed),
-        "grep_search" | "Grep" => format_search_start(&format!("{ICON_SEARCH} {BLUE}Grep{R}"), &parsed),
-        "web_search" | "WebSearch" => {
-            let query = parsed
-                .get("query")
-                .and_then(|value| value.as_str())
-                .unwrap_or("?");
-            format!("{ICON_WEB} {ORANGE}Searching:{R} {query}")
-        }
-        _ => summarize_tool_payload(input),
-    };
-
-    // Full-width expanding box: ╭─── tool_name ────────────╮
-    let tw = term_width().saturating_sub(2).max(30);
-    let label_len = name.len() + 4; // "─ " + name + " ─"
-    let right_fill = tw.saturating_sub(label_len + 2); // 2 for ╭ and ╮
-    format!(
-        "{BLUE}╭─ {ORANGE}{BOLD}{name}{R}{BLUE} {right}╮{R}\n{BLUE}│{R}  {detail}\n{BLUE}╰{bottom}╯{R}",
-        right = "─".repeat(right_fill),
-        bottom = "─".repeat(tw.saturating_sub(2)),
-    )
-}
-
-fn format_tool_result(name: &str, output: &str, is_error: bool) -> String {
-    use crate::brand::*;
-    let icon = if is_error { ICON_ERR } else { ICON_OK };
-
-    if is_error {
-        let summary = truncate_for_summary(output.trim(), 160);
-        return if summary.is_empty() {
-            format!("{icon} {DIM}{name}{R}")
-        } else {
-            format!("{icon} {DIM}{name}{R}\n{RED}{summary}{R}")
-        };
-    }
-
-    let parsed: serde_json::Value =
-        serde_json::from_str(output).unwrap_or(serde_json::Value::String(output.to_string()));
-    match name {
-        "bash" | "Bash" => format_bash_result(icon, &parsed),
-        "read_file" | "Read" => format_read_result(icon, &parsed),
-        "write_file" | "Write" => format_write_result(icon, &parsed),
-        "edit_file" | "Edit" => format_edit_result(icon, &parsed),
-        "glob_search" | "Glob" => format_glob_result(icon, &parsed),
-        "grep_search" | "Grep" => format_grep_result(icon, &parsed),
-        _ => format_generic_tool_result(icon, name, &parsed),
-    }
-}
-
-const DISPLAY_TRUNCATION_NOTICE: &str =
-    "\x1b[2m… output truncated for display; full result preserved in session.\x1b[0m";
-const READ_DISPLAY_MAX_LINES: usize = 80;
-const READ_DISPLAY_MAX_CHARS: usize = 6_000;
-const TOOL_OUTPUT_DISPLAY_MAX_LINES: usize = 60;
-const TOOL_OUTPUT_DISPLAY_MAX_CHARS: usize = 4_000;
-
-fn extract_tool_path(parsed: &serde_json::Value) -> String {
-    let raw = parsed
-        .get("file_path")
-        .or_else(|| parsed.get("filePath"))
-        .or_else(|| parsed.get("path"))
-        .and_then(|value| value.as_str())
-        .unwrap_or("?");
-    display_clean_path(raw)
-}
-
-/// Strip Windows `\\?\` UNC prefix and convert to relative path for display.
-fn display_clean_path(raw: &str) -> String {
-    // Strip the \\?\ extended-length prefix that Windows APIs inject
-    let cleaned = raw.strip_prefix(r"\\?\").unwrap_or(raw);
-    // Try to make it relative to the current working directory
-    if let Ok(cwd) = std::env::current_dir() {
-        if let Ok(rel) = Path::new(cleaned).strip_prefix(&cwd) {
-            let rel_str = rel.display().to_string();
-            return if rel_str.is_empty() { ".".to_string() } else { rel_str };
-        }
-    }
-    cleaned.to_string()
-}
-
-fn format_search_start(label: &str, parsed: &serde_json::Value) -> String {
-    let pattern = parsed
-        .get("pattern")
-        .and_then(|value| value.as_str())
-        .unwrap_or("?");
-    let scope = parsed
-        .get("path")
-        .and_then(|value| value.as_str())
-        .unwrap_or(".");
-    format!("{label} {pattern}\n\x1b[2min {scope}\x1b[0m")
-}
-
-fn format_patch_preview(old_value: &str, new_value: &str) -> Option<String> {
-    use crate::brand::*;
-    if old_value.is_empty() && new_value.is_empty() {
-        return None;
-    }
-    let mut lines = Vec::new();
-    // Show up to 4 removed lines
-    for line in old_value.lines().filter(|l| !l.trim().is_empty()).take(4) {
-        lines.push(format!(
-            "{RED}─ {}{R}",
-            truncate_for_summary(line, 80)
-        ));
-    }
-    let old_remaining = old_value.lines().filter(|l| !l.trim().is_empty()).count().saturating_sub(4);
-    if old_remaining > 0 {
-        lines.push(format!("{DIM}  … {old_remaining} more lines removed{R}"));
-    }
-    // Show up to 4 added lines
-    for line in new_value.lines().filter(|l| !l.trim().is_empty()).take(4) {
-        lines.push(format!(
-            "{GREEN}+ {}{R}",
-            truncate_for_summary(line, 80)
-        ));
-    }
-    let new_remaining = new_value.lines().filter(|l| !l.trim().is_empty()).count().saturating_sub(4);
-    if new_remaining > 0 {
-        lines.push(format!("{DIM}  … {new_remaining} more lines added{R}"));
-    }
-    if lines.is_empty() { None } else { Some(lines.join("\n")) }
-}
-
-fn format_bash_call(parsed: &serde_json::Value) -> String {
-    let command = parsed
-        .get("command")
-        .and_then(|value| value.as_str())
-        .unwrap_or_default();
-    if command.is_empty() {
-        String::new()
-    } else {
-        format!(
-            "{}{} $ {} {}",
-            crate::brand::BG_CODE, crate::brand::WHITE,
-            truncate_for_summary(command, 160),
-            crate::brand::R
-        )
-    }
-}
-
-fn first_visible_line(text: &str) -> &str {
-    text.lines()
-        .find(|line| !line.trim().is_empty())
-        .unwrap_or(text)
-}
-
-fn format_bash_result(icon: &str, parsed: &serde_json::Value) -> String {
-    use crate::brand::*;
-    use std::fmt::Write as _;
-
-    let mut lines = vec![format!("{icon} {}{BOLD}bash{}{R}", crate::brand::BLUE, crate::brand::R)];
-    if let Some(task_id) = parsed
-        .get("backgroundTaskId")
-        .and_then(|value| value.as_str())
-    {
-        write!(&mut lines[0], " backgrounded ({task_id})").expect("write to string");
-    } else if let Some(status) = parsed
-        .get("returnCodeInterpretation")
-        .and_then(|value| value.as_str())
-        .filter(|status| !status.is_empty())
-    {
-        write!(&mut lines[0], " {status}").expect("write to string");
-    }
-
-    if let Some(stdout) = parsed.get("stdout").and_then(|value| value.as_str()) {
-        if !stdout.trim().is_empty() {
-            lines.push(truncate_output_for_display(
-                stdout,
-                TOOL_OUTPUT_DISPLAY_MAX_LINES,
-                TOOL_OUTPUT_DISPLAY_MAX_CHARS,
-            ));
-        }
-    }
-    if let Some(stderr) = parsed.get("stderr").and_then(|value| value.as_str()) {
-        if !stderr.trim().is_empty() {
-            lines.push(format!(
-                "{}{}{}",
-                crate::brand::RED,
-                truncate_output_for_display(
-                    stderr,
-                    TOOL_OUTPUT_DISPLAY_MAX_LINES,
-                    TOOL_OUTPUT_DISPLAY_MAX_CHARS,
-                ),
-                crate::brand::R,
-            ));
-        }
-    }
-
-    lines.join("\n\n")
-}
-
-fn format_read_result(icon: &str, parsed: &serde_json::Value) -> String {
-    use crate::brand::*;
-    let file = parsed.get("file").unwrap_or(parsed);
-    let path = extract_tool_path(file);
-    let start_line = file
-        .get("startLine")
-        .and_then(serde_json::Value::as_u64)
-        .unwrap_or(1);
-    let num_lines = file
-        .get("numLines")
-        .and_then(serde_json::Value::as_u64)
-        .unwrap_or(0);
-    let total_lines = file
-        .get("totalLines")
-        .and_then(serde_json::Value::as_u64)
-        .unwrap_or(num_lines);
-    let content = file
-        .get("content")
-        .and_then(|value| value.as_str())
-        .unwrap_or_default();
-    let end_line = start_line.saturating_add(num_lines.saturating_sub(1));
-
-    format!(
-        "{icon} {ICON_FILE} {DIM}Read {path} (lines {}-{} of {}){R}\n{}",
-        start_line,
-        end_line.max(start_line),
-        total_lines,
-        truncate_output_for_display(content, READ_DISPLAY_MAX_LINES, READ_DISPLAY_MAX_CHARS)
-    )
-}
-
-fn format_write_result(icon: &str, parsed: &serde_json::Value) -> String {
-    use crate::brand::*;
-    let path = extract_tool_path(parsed);
-    let kind = parsed
-        .get("type")
-        .and_then(|value| value.as_str())
-        .unwrap_or("write");
-    let line_count = parsed
-        .get("content")
-        .and_then(|value| value.as_str())
-        .map_or(0, |content| content.lines().count());
-    format!(
-        "{icon} {ICON_WRITE} {GREEN}{BOLD}{} {path}{R} {DIM}({line_count} lines){R}",
-        if kind == "create" { "Wrote" } else { "Updated" },
-    )
-}
-
-fn format_structured_patch_preview(parsed: &serde_json::Value) -> Option<String> {
-    let hunks = parsed.get("structuredPatch")?.as_array()?;
-    let mut preview = Vec::new();
-    for hunk in hunks.iter().take(2) {
-        let lines = hunk.get("lines")?.as_array()?;
-        for line in lines.iter().filter_map(|value| value.as_str()).take(6) {
-            match line.chars().next() {
-                Some('+') => preview.push(format!("{GREEN}{line}{R}", GREEN=crate::brand::GREEN, R=crate::brand::R)),
-                Some('-') => preview.push(format!("{RED}{line}{R}", RED=crate::brand::RED, R=crate::brand::R)),
-                _ => preview.push(line.to_string()),
-            }
-        }
-    }
-    if preview.is_empty() {
-        None
-    } else {
-        Some(preview.join("\n"))
-    }
-}
-
-fn format_edit_result(icon: &str, parsed: &serde_json::Value) -> String {
-    let path = extract_tool_path(parsed);
-    let suffix = if parsed
-        .get("replaceAll")
-        .and_then(serde_json::Value::as_bool)
-        .unwrap_or(false)
-    {
-        " (replace all)"
-    } else {
-        ""
-    };
-    let preview = format_structured_patch_preview(parsed).or_else(|| {
-        let old_value = parsed
-            .get("oldString")
-            .and_then(|value| value.as_str())
-            .unwrap_or_default();
-        let new_value = parsed
-            .get("newString")
-            .and_then(|value| value.as_str())
-            .unwrap_or_default();
-        format_patch_preview(old_value, new_value)
-    });
-
-    match preview {
-        Some(preview) => format!("{icon} {ICON_EDIT} {ORANGE}{BOLD}Edited {path}{suffix}{R}\n{preview}", ICON_EDIT=crate::brand::ICON_EDIT, ORANGE=crate::brand::ORANGE, BOLD=crate::brand::BOLD, R=crate::brand::R),
-        None => format!("{icon} {ICON_EDIT} {ORANGE}{BOLD}Edited {path}{suffix}{R}", ICON_EDIT=crate::brand::ICON_EDIT, ORANGE=crate::brand::ORANGE, BOLD=crate::brand::BOLD, R=crate::brand::R),
-    }
-}
-
-fn format_glob_result(icon: &str, parsed: &serde_json::Value) -> String {
-    let num_files = parsed
-        .get("numFiles")
-        .and_then(serde_json::Value::as_u64)
-        .unwrap_or(0);
-    let filenames = parsed
-        .get("filenames")
-        .and_then(|value| value.as_array())
-        .map(|files| {
-            files
-                .iter()
-                .filter_map(|value| value.as_str())
-                .take(8)
-                .map(display_clean_path)
-                .collect::<Vec<_>>()
-                .join("\n")
-        })
-        .unwrap_or_default();
-    if filenames.is_empty() {
-        format!("{icon} \x1b[38;5;245mglob_search\x1b[0m matched {num_files} files")
-    } else {
-        format!("{icon} \x1b[38;5;245mglob_search\x1b[0m matched {num_files} files\n{filenames}")
-    }
-}
-
-fn format_grep_result(icon: &str, parsed: &serde_json::Value) -> String {
-    let num_matches = parsed
-        .get("numMatches")
-        .and_then(serde_json::Value::as_u64)
-        .unwrap_or(0);
-    let num_files = parsed
-        .get("numFiles")
-        .and_then(serde_json::Value::as_u64)
-        .unwrap_or(0);
-    let content = parsed
-        .get("content")
-        .and_then(|value| value.as_str())
-        .unwrap_or_default();
-    let filenames = parsed
-        .get("filenames")
-        .and_then(|value| value.as_array())
-        .map(|files| {
-            files
-                .iter()
-                .filter_map(|value| value.as_str())
-                .take(8)
-                .collect::<Vec<_>>()
-                .join("\n")
-        })
-        .unwrap_or_default();
-    let summary = format!(
-        "{icon} \x1b[38;5;245mgrep_search\x1b[0m {num_matches} matches across {num_files} files"
-    );
-    if !content.trim().is_empty() {
-        format!(
-            "{summary}\n{}",
-            truncate_output_for_display(
-                content,
-                TOOL_OUTPUT_DISPLAY_MAX_LINES,
-                TOOL_OUTPUT_DISPLAY_MAX_CHARS,
-            )
-        )
-    } else if !filenames.is_empty() {
-        format!("{summary}\n{filenames}")
-    } else {
-        summary
-    }
-}
-
-fn format_generic_tool_result(icon: &str, name: &str, parsed: &serde_json::Value) -> String {
-    let rendered_output = match parsed {
-        serde_json::Value::String(text) => text.clone(),
-        serde_json::Value::Null => String::new(),
-        serde_json::Value::Object(_) | serde_json::Value::Array(_) => {
-            serde_json::to_string_pretty(parsed).unwrap_or_else(|_| parsed.to_string())
-        }
-        _ => parsed.to_string(),
-    };
-    let preview = truncate_output_for_display(
-        &rendered_output,
-        TOOL_OUTPUT_DISPLAY_MAX_LINES,
-        TOOL_OUTPUT_DISPLAY_MAX_CHARS,
-    );
-
-    if preview.is_empty() {
-        format!("{icon} \x1b[38;5;245m{name}\x1b[0m")
-    } else if preview.contains('\n') {
-        format!("{icon} \x1b[38;5;245m{name}\x1b[0m\n{preview}")
-    } else {
-        format!("{icon} \x1b[38;5;245m{name}:\x1b[0m {preview}")
-    }
-}
-
-fn summarize_tool_payload(payload: &str) -> String {
-    let compact = match serde_json::from_str::<serde_json::Value>(payload) {
-        Ok(value) => value.to_string(),
-        Err(_) => payload.trim().to_string(),
-    };
-    truncate_for_summary(&compact, 96)
-}
-
-fn truncate_for_summary(value: &str, limit: usize) -> String {
-    let mut chars = value.chars();
-    let truncated = chars.by_ref().take(limit).collect::<String>();
-    if chars.next().is_some() {
-        format!("{truncated}…")
-    } else {
-        truncated
-    }
-}
-
-fn truncate_output_for_display(content: &str, max_lines: usize, max_chars: usize) -> String {
-    let original = content.trim_end_matches('\n');
-    if original.is_empty() {
-        return String::new();
-    }
-
-    let mut preview_lines = Vec::new();
-    let mut used_chars = 0usize;
-    let mut truncated = false;
-
-    for (index, line) in original.lines().enumerate() {
-        if index >= max_lines {
-            truncated = true;
-            break;
-        }
-
-        let newline_cost = usize::from(!preview_lines.is_empty());
-        let available = max_chars.saturating_sub(used_chars + newline_cost);
-        if available == 0 {
-            truncated = true;
-            break;
-        }
-
-        let line_chars = line.chars().count();
-        if line_chars > available {
-            preview_lines.push(line.chars().take(available).collect::<String>());
-            truncated = true;
-            break;
-        }
-
-        preview_lines.push(line.to_string());
-        used_chars += newline_cost + line_chars;
-    }
-
-    let mut preview = preview_lines.join("\n");
-    if truncated {
-        if !preview.is_empty() {
-            preview.push('\n');
-        }
-        preview.push_str(DISPLAY_TRUNCATION_NOTICE);
-    }
-    preview
-}
-
+// ── Tool UI (extracted to tool_ui.rs) ───────────────────
 fn render_thinking_block_summary(
     out: &mut (impl Write + ?Sized),
     char_count: Option<usize>,
     redacted: bool,
 ) -> Result<(), RuntimeError> {
     let summary = if redacted {
-        "\n▶ Thinking block hidden by provider\n".to_string()
+        "\nâ–¶ Thinking block hidden by provider\n".to_string()
     } else if let Some(char_count) = char_count {
-        format!("\n▶ Thinking ({char_count} chars hidden)\n")
+        format!("\nâ–¶ Thinking ({char_count} chars hidden)\n")
     } else {
-        "\n▶ Thinking hidden\n".to_string()
+        "\nâ–¶ Thinking hidden\n".to_string()
     };
     write!(out, "{summary}")
         .and_then(|()| out.flush())
@@ -9238,7 +8761,7 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
     writeln!(out, "  source of truth: {OFFICIAL_REPO_URL}")?;
     writeln!(
         out,
-        "  do not run `{DEPRECATED_INSTALL_COMMAND}` — it installs a deprecated stub"
+        "  do not run `{DEPRECATED_INSTALL_COMMAND}` â€” it installs a deprecated stub"
     )?;
     writeln!(out, "  neuron init")?;
     writeln!(out, "  neuron export")?;
@@ -10483,7 +10006,7 @@ mod tests {
         assert!(markdown.contains("How do I list files?"));
         assert!(markdown.contains("## 2. Assistant"));
         assert!(markdown.contains("**Tool call** `bash`"));
-        assert!(markdown.contains("toolu_abcdef…"));
+        assert!(markdown.contains("toolu_abcdefâ€¦"));
         assert!(markdown.contains("ls -la"));
         assert!(markdown.contains("## 3. Tool"));
         assert!(markdown.contains("**Tool result** `bash`"));
@@ -10532,7 +10055,7 @@ mod tests {
 
         // then
         assert_eq!(compacted, r#"{"command":"ls -la","cwd":"/tmp"}"#);
-        assert!(truncated.ends_with('…'));
+        assert!(truncated.ends_with('\u{2026}'));
         assert!(truncated.chars().count() <= 281);
     }
 
@@ -10547,7 +10070,7 @@ mod tests {
         let trimmed_short = short_tool_id(short);
 
         // then
-        assert_eq!(trimmed_long, "toolu_01ABCD…");
+        assert_eq!(trimmed_long, "toolu_01ABCDâ€¦");
         assert_eq!(trimmed_short, "tool_1");
     }
 
@@ -11129,9 +10652,9 @@ mod tests {
         assert!(report.contains("Permissions"));
         assert!(report.contains("Active mode      workspace-write"));
         assert!(report.contains("Modes"));
-        assert!(report.contains("read-only          ○ available Read/search tools only"));
-        assert!(report.contains("workspace-write    ● current   Edit files inside the workspace"));
-        assert!(report.contains("danger-full-access ○ available Unrestricted tool access"));
+        assert!(report.contains("read-only          â—‹ available Read/search tools only"));
+        assert!(report.contains("workspace-write    â— current   Edit files inside the workspace"));
+        assert!(report.contains("danger-full-access â—‹ available Unrestricted tool access"));
     }
 
     #[test]
@@ -11233,7 +10756,7 @@ mod tests {
         assert!(status.contains("Project root     /tmp"));
         assert!(status.contains("Git branch       main"));
         assert!(
-            status.contains("Git state        dirty · 3 files · 1 staged, 1 unstaged, 1 untracked")
+            status.contains("Git state        dirty Â· 3 files Â· 1 staged, 1 unstaged, 1 untracked")
         );
         assert!(status.contains("Changed files    3"));
         assert!(status.contains("Staged           1"));
@@ -11242,7 +10765,7 @@ mod tests {
         assert!(status.contains("Session          session.jsonl"));
         assert!(status.contains("Config files     loaded 2/3"));
         assert!(status.contains("Memory files     4"));
-        assert!(status.contains("Suggested flow   /status → /diff → /commit"));
+        assert!(status.contains("Suggested flow   /status â†’ /diff â†’ /commit"));
     }
 
     #[test]
@@ -11258,7 +10781,7 @@ mod tests {
         let preflight = format_commit_preflight_report(Some("feature/ux"), summary);
         assert!(preflight.contains("Result           ready"));
         assert!(preflight.contains("Branch           feature/ux"));
-        assert!(preflight.contains("Workspace        dirty · 2 files · 1 staged, 1 unstaged"));
+        assert!(preflight.contains("Workspace        dirty Â· 2 files Â· 1 staged, 1 unstaged"));
         assert!(preflight
             .contains("Action           create a git commit from the current workspace changes"));
     }
@@ -11380,7 +10903,7 @@ UU conflicted.rs",
         );
         assert_eq!(
             summary.headline(),
-            "dirty · 4 files · 2 staged, 2 unstaged, 1 untracked, 1 conflicted"
+            "dirty Â· 4 files Â· 2 staged, 2 unstaged, 1 untracked, 1 conflicted"
         );
     }
 
@@ -12267,7 +11790,7 @@ UU conflicted.rs",
             AssistantEvent::TextDelta(text) if text == "Final answer"
         ));
         let rendered = String::from_utf8(out).expect("utf8");
-        assert!(rendered.contains("▶ Thinking (6 chars hidden)"));
+        assert!(rendered.contains("â–¶ Thinking (6 chars hidden)"));
         assert!(!rendered.contains("step 1"));
     }
 
