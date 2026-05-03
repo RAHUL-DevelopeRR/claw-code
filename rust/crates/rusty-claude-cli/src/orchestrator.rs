@@ -385,49 +385,105 @@ pub fn run_power(api_key: &str, user_input: &str) -> String {
     let mode = "power";
 
     let azure_models = Models::cheap_azure();
-    let mut results: Vec<ModelResponse> = Vec::new();
     let total = azure_models.len() + 1; // +1 for OpenRouter
 
-    // Azure agents
+    // ── Spawn ALL agents in parallel ─────────────────────────
+    let mut handles: Vec<std::thread::JoinHandle<Option<ModelResponse>>> = Vec::new();
+
+    // Azure agents (parallel)
     for (i, model) in azure_models.iter().enumerate() {
-        log_phase(mode, color, &format!("\x1b[2mAgent {}/{}: {} (Azure)...\x1b[0m", i + 1, total, model));
-        let msgs = vec![serde_json::json!({
-            "role": "user",
-            "content": format!(
-                "You are an expert developer. Solve this task with maximum quality.\n\
-                 Write complete, production-ready code.\n\nTask: {user_input}"
-            )
-        })];
-        match azure_call(api_key, model, &msgs, 6000) {
-            Ok(r) => { log_ok(mode, color, &r.model, r.tokens); results.push(r); }
-            Err(e) => { log_fail(mode, color, model, &e); }
-        }
+        let key = api_key.to_string();
+        let model = model.to_string();
+        let input = user_input.to_string();
+        let idx = i + 1;
+
+        handles.push(std::thread::spawn(move || {
+            eprintln!(
+                "\x1b[31m[power]\x1b[0m \x1b[2mAgent {}/{}: {} (Azure)...\x1b[0m",
+                idx, total, model
+            );
+            let msgs = vec![serde_json::json!({
+                "role": "user",
+                "content": format!(
+                    "You are an expert developer. Solve this task with maximum quality.\n\
+                     Write complete, production-ready code.\n\nTask: {input}"
+                )
+            })];
+            match azure_call(&key, &model, &msgs, 6000) {
+                Ok(r) => {
+                    eprintln!(
+                        "\x1b[31m[power]\x1b[0m \x1b[32m\u{2713}\x1b[0m {} done ({} tokens)",
+                        r.model, r.tokens
+                    );
+                    Some(r)
+                }
+                Err(e) => {
+                    eprintln!(
+                        "\x1b[31m[power]\x1b[0m \x1b[31m\u{2717}\x1b[0m {} failed: {e}",
+                        model
+                    );
+                    None
+                }
+            }
+        }));
     }
 
-    // OpenRouter 4th agent (fail-safe)
-    let or_model = Models::openrouter_free();
-    log_phase(mode, color, &format!("\x1b[2mAgent {}/{}: {} (OpenRouter)...\x1b[0m", total, total, or_model));
-    if let Some(or_key) = crate::auth::ensure_api_key() {
-        let msgs = vec![serde_json::json!({
-            "role": "user",
-            "content": format!(
-                "You are an expert developer. Solve this task with maximum quality.\n\
-                 Write complete, production-ready code.\n\nTask: {user_input}"
-            )
-        })];
-        match openrouter_call(&or_key, or_model, &msgs, 6000) {
-            Ok(r) => { log_ok(mode, color, &r.model, r.tokens); results.push(r); }
-            Err(e) => { log_skip(mode, color, or_model, &format!("{e}")); }
-        }
-    } else {
-        log_skip(mode, color, or_model, "no auth");
+    // OpenRouter 4th agent (parallel with Azure agents)
+    {
+        let key = api_key.to_string();
+        let input = user_input.to_string();
+        let or_model = Models::openrouter_free().to_string();
+        let or_key = crate::auth::ensure_api_key();
+
+        handles.push(std::thread::spawn(move || {
+            eprintln!(
+                "\x1b[31m[power]\x1b[0m \x1b[2mAgent {}/{}: {} (OpenRouter)...\x1b[0m",
+                total, total, or_model
+            );
+            let Some(api_key) = or_key else {
+                eprintln!(
+                    "\x1b[31m[power]\x1b[0m \x1b[33m\u{2298}\x1b[0m {} skipped: no auth",
+                    or_model
+                );
+                return None;
+            };
+            let msgs = vec![serde_json::json!({
+                "role": "user",
+                "content": format!(
+                    "You are an expert developer. Solve this task with maximum quality.\n\
+                     Write complete, production-ready code.\n\nTask: {input}"
+                )
+            })];
+            match openrouter_call(&api_key, &or_model, &msgs, 6000) {
+                Ok(r) => {
+                    eprintln!(
+                        "\x1b[31m[power]\x1b[0m \x1b[32m\u{2713}\x1b[0m {} done ({} tokens)",
+                        r.model, r.tokens
+                    );
+                    Some(r)
+                }
+                Err(e) => {
+                    eprintln!(
+                        "\x1b[31m[power]\x1b[0m \x1b[33m\u{2298}\x1b[0m {} skipped: {e}",
+                        or_model
+                    );
+                    None
+                }
+            }
+        }));
     }
+
+    // ── Collect results from all threads ─────────────────────
+    let results: Vec<ModelResponse> = handles
+        .into_iter()
+        .filter_map(|h| h.join().ok().flatten())
+        .collect();
 
     if results.is_empty() {
         return user_input.to_string();
     }
 
-    // Merge with dedicated agent
+    // Merge with dedicated agent (this is the only sequential step)
     let mut merge_content = String::from(
         "You are a merge agent. Below are solutions from multiple AI models for the same task.\n\
          COMBINE the BEST PARTS from each into ONE final solution:\n\
@@ -448,7 +504,7 @@ pub fn run_power(api_key: &str, user_input: &str) -> String {
             log_ok(mode, color, &r.model, r.tokens);
             format!(
                 "[POWER MODE — {} MODELS MERGED]\n\
-                 Multiple models generated solutions, a merge agent combined the best parts.\n\n\
+                 Multiple models generated solutions IN PARALLEL, a merge agent combined the best parts.\n\n\
                  === MERGED RESULT ===\n{}\n\n\
                  Execute this merged code using your tools (write_file, bash, etc.).\n\
                  Write the files exactly as specified.\n\
