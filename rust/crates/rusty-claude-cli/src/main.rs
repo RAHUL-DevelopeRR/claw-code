@@ -1942,7 +1942,7 @@ impl LiveCli {
         let quota = crate::quota::QuotaState::load();
         let quota_str = quota.display_compact();
 
-        // â”€â”€ Brand colors â”€â”€
+        // -- Brand colors --
         use crate::brand::*;
         let b = BLUE;     // border
         let o = ORANGE;   // accent
@@ -1961,29 +1961,28 @@ impl LiveCli {
             map.status_line()
         };
 
-        // â”€â”€ Clean box layout with dynamic widths â”€â”€
+        // -- Clean box layout with ASCII borders --
         let w_left = 38;  // left panel inner width
         let w_right = 34; // right panel inner width
-        let w_total = w_left + w_right + 3; // +3 for â”‚ separator
 
         let mut lines = Vec::new();
 
         // Header line
         lines.push(format!(
-            "  {b}â•¶{r} {ng} {d}CLI v{ver}{r} {b}â”€â”€â”€{r} {d}Powered by{r} {s}âŠ—{r} {d}zero-x.live{r}",
+            "  {b}>{r} {ng} {d}CLI v{ver}{r} {b}---{r} {d}Powered by{r} {s}@{r} {d}zero-x.live{r}",
             ver=version,
         ));
 
         // Top border
         lines.push(format!(
-            "  {b}â•­{left}â”¬{right}â•®{r}",
-            left = "â”€".repeat(w_left),
-            right = "â”€".repeat(w_right),
+            "  {b}+{left}+{right}+{r}",
+            left = "-".repeat(w_left),
+            right = "-".repeat(w_right),
         ));
 
         // Empty row
         lines.push(format!(
-            "  {b}â”‚{r}{ls}{b}â”‚{r}{rs}{b}â”‚{r}",
+            "  {b}|{r}{ls}{b}|{r}{rs}{b}|{r}",
             ls = " ".repeat(w_left),
             rs = " ".repeat(w_right),
         ));
@@ -1992,7 +1991,7 @@ impl LiveCli {
         let welcome = format!("{w}{bd}Welcome back, {user}!{r}", user=username);
         let tips = format!("{o}{bd}Tips for getting started{r}");
         lines.push(format!(
-            "  {b}â”‚{r}  {welcome}{wpad}{b}â”‚{r}  {tips}{tpad}{b}â”‚{r}",
+            "  {b}|{r}  {welcome}{wpad}{b}|{r}  {tips}{tpad}{b}|{r}",
             wpad = " ".repeat(w_left.saturating_sub(brand::strip_ansi_len(&welcome) + 2)),
             tpad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&tips) + 2)),
         ));
@@ -2000,21 +1999,21 @@ impl LiveCli {
         // Tips content
         let tip1 = format!("{d}Run{r} {o}/init{r} {d}to create a NEURON.md{r}");
         lines.push(format!(
-            "  {b}â”‚{r}{ls}{b}â”‚{r}  {tip1}{tpad}{b}â”‚{r}",
+            "  {b}|{r}{ls}{b}|{r}  {tip1}{tpad}{b}|{r}",
             ls = " ".repeat(w_left),
             tpad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&tip1) + 2)),
         ));
 
         let tip2 = format!("{d}file with project context{r}");
         lines.push(format!(
-            "  {b}â”‚{r}   {s}*{r}        {s}Â·{r}        {s}*{r}   {hpad}{b}â”‚{r}  {tip2}{tpad}{b}â”‚{r}",
+            "  {b}|{r}   {s}*{r}        {s}.{r}        {s}*{r}   {hpad}{b}|{r}  {tip2}{tpad}{b}|{r}",
             hpad = " ".repeat(w_left.saturating_sub(27)),
             tpad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&tip2) + 2)),
         ));
 
         let tip3 = format!("{d}instructions for Neuron...{r}");
         lines.push(format!(
-            "  {b}â”‚{r}  {s}Â·{r}  {b}â•²â•â•â•—{r}    {b}â•”â•â•â•²{r}  {s}Â·{r}   {hpad}{b}â”‚{r}  {tip3}{tpad}{b}â”‚{r}",
+            "  {b}|{r}  {s}.{r}  {b}\\--\\{r}    {b}/--/{r}  {s}.{r}   {hpad}{b}|{r}  {tip3}{tpad}{b}|{r}",
             hpad = " ".repeat(w_left.saturating_sub(27)),
             tpad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&tip3) + 2)),
         ));
@@ -2022,68 +2021,68 @@ impl LiveCli {
         // Helix center rows + what's new
         let whatsnew = format!("{o}{bd}What's new{r}");
         lines.push(format!(
-            "  {b}â”‚{r} {s}*{r}    {b}â•²â•â•{o}â•¬{RED}â•â•â•â•{o}â•¬{b}â•â•â•²{r}    {s}*{r}   {hpad}{b}â”‚{r}{rpad}{b}â”‚{r}",
+            "  {b}|{r} {s}*{r}    {b}\\--{o}X{RED}----{o}X{b}--/{r}    {s}*{r}   {hpad}{b}|{r}{rpad}{b}|{r}",
             RED=RED, hpad = " ".repeat(w_left.saturating_sub(30)),
             rpad = " ".repeat(w_right),
         ));
 
         lines.push(format!(
-            "  {b}â”‚{r} {s}Â·{r}  {g}â•”{b}â•â•â•²{r}  {s}Â·  Â·{r}  {b}â•²â•â•{g}â•—{r}  {s}Â·{r}  {hpad}{b}â”‚{r}  {whatsnew}{wpad}{b}â”‚{r}",
+            "  {b}|{r} {s}.{r}  {g}/{b}--/{r}  {s}.  .{r}  {b}\\--{g}\\{r}  {s}.{r}  {hpad}{b}|{r}  {whatsnew}{wpad}{b}|{r}",
             hpad = " ".repeat(w_left.saturating_sub(30)),
             wpad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&whatsnew) + 2)),
         ));
 
         // What's new items
         let news = [
-            format!("{d}â”€ 44K token/day Azure quota{r}"),
-            format!("{d}â”€ OpenRouter free fallback{r}"),
-            format!("{d}â”€ {repo_status}{r}"),
+            format!("{d}- 44K token/day Azure quota{r}"),
+            format!("{d}- OpenRouter free fallback{r}"),
+            format!("{d}- {repo_status}{r}"),
             format!("{d}/release-notes for more{r}"),
         ];
 
         lines.push(format!(
-            "  {b}â”‚{r}    {RED}â•¬{b}â•â•â•²{r}   {s}Â·  Â·{r}   {b}â•²â•â•{RED}â•¬{r}   {hpad}{b}â”‚{r}  {n}{npad}{b}â”‚{r}",
+            "  {b}|{r}    {RED}X{b}--/{r}   {s}.  .{r}   {b}\\--{RED}X{r}   {hpad}{b}|{r}  {n}{npad}{b}|{r}",
             RED=RED, hpad = " ".repeat(w_left.saturating_sub(30)),
             n = news[0], npad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&news[0]) + 2)),
         ));
 
         lines.push(format!(
-            "  {b}â”‚{r} {s}Â·{r}  {g}â•š{b}â•â•â•²{r}  {s}Â·  Â·{r}  {b}â•²â•â•{g}â•{r}  {s}Â·{r}  {hpad}{b}â”‚{r}  {n}{npad}{b}â”‚{r}",
+            "  {b}|{r} {s}.{r}  {g}\\{b}--/{r}  {s}.  .{r}  {b}\\--{g}/{r}  {s}.{r}  {hpad}{b}|{r}  {n}{npad}{b}|{r}",
             hpad = " ".repeat(w_left.saturating_sub(30)),
             n = news[1], npad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&news[1]) + 2)),
         ));
 
         lines.push(format!(
-            "  {b}â”‚{r} {s}*{r}    {b}â•²â•â•{o}â•¬{RED}â•â•â•â•{o}â•¬{b}â•â•â•²{r}    {s}*{r}   {hpad}{b}â”‚{r}  {n}{npad}{b}â”‚{r}",
+            "  {b}|{r} {s}*{r}    {b}\\--{o}X{RED}----{o}X{b}--/{r}    {s}*{r}   {hpad}{b}|{r}  {n}{npad}{b}|{r}",
             RED=RED, hpad = " ".repeat(w_left.saturating_sub(30)),
             n = news[2], npad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&news[2]) + 2)),
         ));
 
         lines.push(format!(
-            "  {b}â”‚{r}  {s}Â·{r}  {b}â•²â•â•â•{r}    {b}â•šâ•â•â•²{r}  {s}Â·{r}   {hpad}{b}â”‚{r}  {n}{npad}{b}â”‚{r}",
+            "  {b}|{r}  {s}.{r}  {b}\\---{r}    {b}\\--/{r}  {s}.{r}   {hpad}{b}|{r}  {n}{npad}{b}|{r}",
             hpad = " ".repeat(w_left.saturating_sub(27)),
             n = news[3], npad = " ".repeat(w_right.saturating_sub(brand::strip_ansi_len(&news[3]) + 2)),
         ));
 
         // Neuron branding row
         lines.push(format!(
-            "  {b}â”‚{r}   {s}*{r}     {ng}     {s}*{r}     {hpad}{b}â”‚{r}{rpad}{b}â”‚{r}",
+            "  {b}|{r}   {s}*{r}     {ng}     {s}*{r}     {hpad}{b}|{r}{rpad}{b}|{r}",
             hpad = " ".repeat(w_left.saturating_sub(27)),
             rpad = " ".repeat(w_right),
         ));
 
-        // âŠ— zero-x.live
+        // @ zero-x.live
         lines.push(format!(
-            "  {b}â”‚{r}      {s}âŠ—{r} {d}zero-x.live{r}          {hpad}{b}â”‚{r}{rpad}{b}â”‚{r}",
+            "  {b}|{r}      {s}@{r} {d}zero-x.live{r}          {hpad}{b}|{r}{rpad}{b}|{r}",
             hpad = " ".repeat(w_left.saturating_sub(33)),
             rpad = " ".repeat(w_right),
         ));
 
         // Model info
-        let model_info = format!("{g}{ms}{r} {d}Â·{r} {b}{prov}{r} {d}Â· Quota: {qs}{r}",
+        let model_info = format!("{g}{ms}{r} {d}.{r} {b}{prov}{r} {d}. Quota: {qs}{r}",
             ms=model_short, prov=provider, qs=quota_str);
         lines.push(format!(
-            "  {b}â”‚{r}  {model_info}{mpad}{b}â”‚{r}{rpad}{b}â”‚{r}",
+            "  {b}|{r}  {model_info}{mpad}{b}|{r}{rpad}{b}|{r}",
             mpad = " ".repeat(w_left.saturating_sub(brand::strip_ansi_len(&model_info) + 2)),
             rpad = " ".repeat(w_right),
         ));
@@ -2091,23 +2090,23 @@ impl LiveCli {
         // CWD
         let cwd_line = format!("{d}{cwd}{r}");
         lines.push(format!(
-            "  {b}â”‚{r}  {cwd_line}{cpad}{b}â”‚{r}{rpad}{b}â”‚{r}",
+            "  {b}|{r}  {cwd_line}{cpad}{b}|{r}{rpad}{b}|{r}",
             cpad = " ".repeat(w_left.saturating_sub(brand::strip_ansi_len(&cwd_line) + 2)),
             rpad = " ".repeat(w_right),
         ));
 
         // Empty row
         lines.push(format!(
-            "  {b}â”‚{r}{ls}{b}â”‚{r}{rs}{b}â”‚{r}",
+            "  {b}|{r}{ls}{b}|{r}{rs}{b}|{r}",
             ls = " ".repeat(w_left),
             rs = " ".repeat(w_right),
         ));
 
         // Bottom border
         lines.push(format!(
-            "  {b}â•°{left}â”´{right}â•¯{r}",
-            left = "â”€".repeat(w_left),
-            right = "â”€".repeat(w_right),
+            "  {b}+{left}+{right}+{r}",
+            left = "-".repeat(w_left),
+            right = "-".repeat(w_right),
         ));
 
         lines.join("\n")
