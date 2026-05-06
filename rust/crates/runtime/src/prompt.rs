@@ -214,6 +214,8 @@ fn discover_instruction_files(cwd: &Path) -> std::io::Result<Vec<ContextFile>> {
         for candidate in [
             dir.join("CLAUDE.md"),
             dir.join("CLAUDE.local.md"),
+            dir.join(".neuron").join("CLAUDE.md"),
+            dir.join(".neuron").join("instructions.md"),
             dir.join(".claw").join("CLAUDE.md"),
             dir.join(".claw").join("instructions.md"),
         ] {

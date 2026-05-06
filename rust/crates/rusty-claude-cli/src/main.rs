@@ -2247,10 +2247,10 @@ impl LiveCli {
                 Some("divide") => "\x1b[38;2;240;160;40m\u{25C8}\x1b[0m Dividing...",
                 Some("chain") => "\x1b[38;2;65;105;195m\u{25C9}\x1b[0m Chaining...",
                 Some("power") => "\x1b[38;2;200;50;40m\u{25B8}\x1b[0m Power mode...",
-                _ => "\x1b[38;2;65;105;195m\u{25E6}\x1b[0m Reasoning...",
+                _ => "\x1b[38;2;65;105;195m\u{25E6}\x1b[0m Thinking...",
             }
         } else {
-            "\x1b[38;2;65;105;195m\u{25E6}\x1b[0m Reasoning..."
+            "\x1b[38;2;65;105;195m\u{25E6}\x1b[0m Thinking..."
         };
         spinner.tick(
             spinner_label,
