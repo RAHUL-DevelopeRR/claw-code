@@ -261,6 +261,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         } => {
             enforce_broad_cwd_policy(allow_broad_cwd, output_format)?;
             run_stale_base_preflight(base_commit.as_deref());
+            // Workspace trust check (skip when stdin is piped so we don't consume the pipe)
+            if std::io::stdin().is_terminal() {
+                let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                if !crate::auth::check_trust(&cwd) {
+                    std::process::exit(1);
+                }
+            }
             // â”€â”€ Resolve provider (Azure primary â†’ OpenRouter fallback) â”€â”€
             // The provider always dictates the model â€” when Azure is up we
             // use gpt-5.5, when falling back to OpenRouter we MUST switch
