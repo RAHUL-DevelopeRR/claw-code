@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neuroncli"
+version = "4.0.2"
+description = "NeuronCLI - AI-powered terminal assistant"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
+authors = [
+    {name = "RAHUL-DevelopeRR"},
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Software Development",
+]
+
+[project.scripts]
+neuron = "neuron_cli:main"
+
+[project.urls]
+Homepage = "https://github.com/RAHUL-DevelopeRR/claw-code"
+Repository = "https://github.com/RAHUL-DevelopeRR/claw-code"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["neuron_cli*"]
+
+[tool.setuptools.package-data]
+neuron_cli = ["neuron.exe"]
