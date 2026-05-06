@@ -3772,11 +3772,7 @@ fn parse_titled_body(value: &str) -> Option<(String, String)> {
 }
 
 fn render_version_report() -> String {
-    let git_sha = GIT_SHA.unwrap_or("unknown");
-    let target = BUILD_TARGET.unwrap_or("unknown");
-    format!(
-        "NeuronCLI\n  Version          {VERSION}\n  Git SHA          {git_sha}\n  Target           {target}\n  Build date       {DEFAULT_DATE}"
-    )
+    format!("{VERSION} (NeuronCLI)")
 }
 
 fn render_export_text(session: &Session) -> String {

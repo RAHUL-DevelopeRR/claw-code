@@ -55,13 +55,16 @@ pub fn format_tool_call_start(name: &str, input: &str) -> String {
         _ => summarize_tool_payload(input),
     };
 
-    // Full-width expanding box
+    // Full-width expanding box with aligned borders
     let tw = term_width().saturating_sub(2).max(30);
-    let label_len = name.len() + 4;
-    let right_fill = tw.saturating_sub(label_len + 2);
+    let label = format!(" {name} ");
+    let label_len = strip_ansi_len(&format!("{ORANGE}{BOLD}{label}{R}"));
+    let left_pad = 3; // "───"
+    let right_pad = tw.saturating_sub(left_pad + label_len);
     format!(
-        "{BLUE}\u{256d}\u{2500} {ORANGE}{BOLD}{name}{R}{BLUE} {right}\u{256e}{R}\n{BLUE}\u{2502}{R}  {detail}\n{BLUE}\u{2570}{bottom}\u{256f}{R}",
-        right = "\u{2500}".repeat(right_fill),
+        "{BLUE}\u{256d}{left}{ORANGE}{BOLD}{label}{R}{BLUE}{right}\u{256e}{R}\n{BLUE}\u{2502}{R}  {detail}\n{BLUE}\u{2570}{bottom}\u{256f}{R}",
+        left = "\u{2500}".repeat(left_pad),
+        right = "\u{2500}".repeat(right_pad),
         bottom = "\u{2500}".repeat(tw.saturating_sub(2)),
     )
 }
