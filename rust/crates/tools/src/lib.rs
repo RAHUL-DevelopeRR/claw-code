@@ -5731,12 +5731,20 @@ fn config_file_for_scope(scope: ConfigScope) -> Result<PathBuf, String> {
     let cwd = std::env::current_dir().map_err(|error| error.to_string())?;
     Ok(match scope {
         ConfigScope::Global => config_home_dir()?.join("settings.json"),
-        ConfigScope::Settings => cwd.join(".claw").join("settings.local.json"),
+        ConfigScope::Settings => {
+            let neuron_path = cwd.join(".neuron").join("settings.local.json");
+            let claw_path = cwd.join(".claw").join("settings.local.json");
+            if neuron_path.exists() || !claw_path.exists() {
+                neuron_path
+            } else {
+                claw_path
+            }
+        }
     })
 }
 
 fn config_home_dir() -> Result<PathBuf, String> {
-    if let Ok(path) = std::env::var("CLAW_CONFIG_HOME") {
+    if let Ok(path) = std::env::var("NEURON_CONFIG_HOME").or_else(|_| std::env::var("CLAW_CONFIG_HOME")) {
         return Ok(PathBuf::from(path));
     }
     let home = std::env::var("HOME")
@@ -5744,10 +5752,16 @@ fn config_home_dir() -> Result<PathBuf, String> {
         .map_err(|_| {
             String::from(
                 "HOME is not set (on Windows, set USERPROFILE or HOME, \
-                 or use CLAW_CONFIG_HOME to point directly at the config directory)",
+                 or use NEURON_CONFIG_HOME to point directly at the config directory)",
             )
         })?;
-    Ok(PathBuf::from(home).join(".claw"))
+    let neuron_home = PathBuf::from(&home).join(".neuron");
+    let claw_home = PathBuf::from(&home).join(".claw");
+    Ok(if neuron_home.exists() || !claw_home.exists() {
+        neuron_home
+    } else {
+        claw_home
+    })
 }
 
 fn read_json_object(path: &Path) -> Result<serde_json::Map<String, Value>, String> {
