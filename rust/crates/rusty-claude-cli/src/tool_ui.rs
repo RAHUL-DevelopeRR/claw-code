@@ -142,27 +142,39 @@ pub fn format_patch_preview(old_value: &str, new_value: &str) -> Option<String> 
         return None;
     }
     let mut lines = Vec::new();
-    // Show up to 4 removed lines
-    for line in old_value.lines().filter(|l| !l.trim().is_empty()).take(4) {
+    let old_lines: Vec<&str> = old_value.lines().filter(|l| !l.trim().is_empty()).collect();
+    let new_lines: Vec<&str> = new_value.lines().filter(|l| !l.trim().is_empty()).collect();
+    // Header with change summary
+    let removed = old_lines.len();
+    let added = new_lines.len();
+    if removed > 0 && added > 0 {
+        lines.push(format!("{DIM}{removed} line{} removed, {added} added{R}", if removed == 1 { "" } else { "s" }));
+    } else if removed > 0 {
+        lines.push(format!("{DIM}{removed} line{} removed{R}", if removed == 1 { "" } else { "s" }));
+    } else if added > 0 {
+        lines.push(format!("{DIM}{added} line{} added{R}", if added == 1 { "" } else { "s" }));
+    }
+    // Show up to 3 removed lines with red minus prefix
+    for line in old_lines.iter().take(3) {
         lines.push(format!(
-            "{RED}\u{2500} {}{R}",
+            "{RED}- {}{R}",
             truncate_for_summary(line, 80)
         ));
     }
-    let old_remaining = old_value.lines().filter(|l| !l.trim().is_empty()).count().saturating_sub(4);
+    let old_remaining = old_lines.len().saturating_sub(3);
     if old_remaining > 0 {
-        lines.push(format!("{DIM}  \u{2026} {old_remaining} more lines removed{R}"));
+        lines.push(format!("{DIM}  ... {old_remaining} more removed{R}"));
     }
-    // Show up to 4 added lines
-    for line in new_value.lines().filter(|l| !l.trim().is_empty()).take(4) {
+    // Show up to 3 added lines with green plus prefix
+    for line in new_lines.iter().take(3) {
         lines.push(format!(
             "{GREEN}+ {}{R}",
             truncate_for_summary(line, 80)
         ));
     }
-    let new_remaining = new_value.lines().filter(|l| !l.trim().is_empty()).count().saturating_sub(4);
+    let new_remaining = new_lines.len().saturating_sub(3);
     if new_remaining > 0 {
-        lines.push(format!("{DIM}  \u{2026} {new_remaining} more lines added{R}"));
+        lines.push(format!("{DIM}  ... {new_remaining} more added{R}"));
     }
     if lines.is_empty() { None } else { Some(lines.join("\n")) }
 }

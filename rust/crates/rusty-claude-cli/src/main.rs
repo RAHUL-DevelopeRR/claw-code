@@ -282,6 +282,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             let effective_prompt = merge_prompt_with_stdin(&prompt, stdin_context.as_deref());
             let mut cli = LiveCli::new(effective_model, true, allowed_tools, permission_mode)?;
             cli.set_reasoning_effort(reasoning_effort);
+            // Print a condensed welcome banner for one-shot mode so the user
+            // sees model info and quota even when not in the REPL.
+            if output_format == CliOutputFormat::Text && !compact {
+                println!("{}", cli.startup_banner());
+                println!("{}", format_connected_line(&cli.model));
+                println!();
+            }
             cli.run_turn_with_output(&effective_prompt, output_format, compact)?;
         }
         CliAction::Doctor { output_format } => run_doctor(output_format)?,
