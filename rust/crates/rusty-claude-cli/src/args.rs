@@ -249,10 +249,8 @@ pub(crate) fn parse_args(args: &[String]) -> Result<CliAction, String> {
             }
             "-p" => {
                 // NeuronCLI compat: -p "prompt" = one-shot prompt
+                // Allow empty prompt so piped stdin works: echo "hello" | neuron -p
                 let prompt = args[index + 1..].join(" ");
-                if prompt.trim().is_empty() {
-                    return Err("-p requires a prompt string".to_string());
-                }
                 return Ok(CliAction::Prompt {
                     prompt,
                     model: resolve_model_alias_with_config(&model),

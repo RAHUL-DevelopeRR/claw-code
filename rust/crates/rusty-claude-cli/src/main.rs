@@ -279,6 +279,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 None
             };
+            // If -p was used with no trailing text, read piped stdin regardless of
+            // permission mode so `echo 'hello' | neuron -p` works as expected.
+            let stdin_context = if prompt.trim().is_empty() {
+                read_piped_stdin()
+            } else {
+                stdin_context
+            };
             let effective_prompt = merge_prompt_with_stdin(&prompt, stdin_context.as_deref());
             let mut cli = LiveCli::new(effective_model, true, allowed_tools, permission_mode)?;
             cli.set_reasoning_effort(reasoning_effort);
