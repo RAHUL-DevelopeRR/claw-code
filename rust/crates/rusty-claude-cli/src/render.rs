@@ -267,7 +267,7 @@ impl TerminalRenderer {
             );
         }
 
-        output.trim_end().to_string()
+        break_inline_bullets(output.trim_end())
     }
 
     #[must_use]
@@ -891,6 +891,29 @@ fn line_closes_fence(line: &str, opener: FenceMarker) -> bool {
 
 fn visible_width(input: &str) -> usize {
     strip_ansi(input).chars().count()
+}
+
+/// Convert inline bullet sequences like "text• item• item" into
+/// line-broken bullets for better terminal readability.
+fn break_inline_bullets(text: &str) -> String {
+    let bullet = '•';
+    let mut result = String::with_capacity(text.len() + 16);
+    let mut chars = text.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        result.push(ch);
+        if ch == bullet {
+            if chars.peek() == Some(&' ') {
+                // Look back: if prev char is not newline, insert one
+                let prev = result.chars().rev().nth(1);
+                if prev.is_some_and(|c| c != '\n') {
+                    result.insert(result.len() - 1, '\n');
+                }
+            }
+        }
+    }
+
+    result
 }
 
 fn strip_ansi(input: &str) -> String {

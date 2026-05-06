@@ -204,25 +204,23 @@ pub(crate) fn run_shell_escape(cmd: &str) {
 //   "[auto] > "        (auto-allow)
 
 pub(crate) fn mode_aware_prompt(mode: &PermissionMode, plan_mode: bool, orchestration_mode: Option<&str>) -> String {
-    // Use \x01 and \x02 to tell rustyline that ANSI codes are non-printing
-    // (prevents cursor misalignment)
     if plan_mode {
-        return "\x01\x1b[38;2;65;105;195m\x02[plan]\x01\x1b[0m\x02 > ".to_string();
+        return "\x1b[38;2;65;105;195m[plan]\x1b[0m > ".to_string();
     }
     if let Some(orch) = orchestration_mode {
         return match orch {
-            "divide" => "\x01\x1b[38;2;90;200;250m\x02[divide]\x01\x1b[0m\x02 > ".to_string(),
-            "chain" => "\x01\x1b[38;2;240;160;40m\x02[chain]\x01\x1b[0m\x02 > ".to_string(),
-            "power" => "\x01\x1b[38;2;200;50;40m\x02[power]\x01\x1b[0m\x02 > ".to_string(),
+            "divide" => "\x1b[38;2;90;200;250m[divide]\x1b[0m > ".to_string(),
+            "chain" => "\x1b[38;2;240;160;40m[chain]\x1b[0m > ".to_string(),
+            "power" => "\x1b[38;2;200;50;40m[power]\x1b[0m > ".to_string(),
             _ => "> ".to_string(),
         };
     }
     match mode {
-        PermissionMode::ReadOnly => "\x01\x1b[38;2;136;136;136m\x02[read]\x01\x1b[0m\x02 > ".to_string(),
-        PermissionMode::WorkspaceWrite => "\x01\x1b[38;2;240;160;40m\x02[edit]\x01\x1b[0m\x02 > ".to_string(),
+        PermissionMode::ReadOnly => "\x1b[38;2;136;136;136m[read]\x1b[0m > ".to_string(),
+        PermissionMode::WorkspaceWrite => "\x1b[38;2;240;160;40m[edit]\x1b[0m > ".to_string(),
         PermissionMode::DangerFullAccess => "> ".to_string(),
-        PermissionMode::Prompt => "\x01\x1b[38;2;65;105;195m\x02[ask]\x01\x1b[0m\x02 > ".to_string(),
-        PermissionMode::Allow => "\x01\x1b[38;2;45;140;60m\x02[auto]\x01\x1b[0m\x02 > ".to_string(),
+        PermissionMode::Prompt => "\x1b[38;2;65;105;195m[ask]\x1b[0m > ".to_string(),
+        PermissionMode::Allow => "\x1b[38;2;45;140;60m[auto]\x1b[0m > ".to_string(),
     }
 }
 
