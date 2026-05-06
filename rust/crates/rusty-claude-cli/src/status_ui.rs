@@ -65,13 +65,15 @@ pub(crate) fn render_shortcuts_panel() -> String {
     // Pad a line to fill the box width exactly.
     let row = |left: &str, right: &str| -> String {
         // left column: 28 chars, right column: 28 chars, 4 chars padding
-        let left_plain_len = left.chars().filter(|c| !c.is_ascii_control()).count();
-        let right_plain_len = right.chars().filter(|c| !c.is_ascii_control()).count();
-        let _ = left_plain_len;
-        let _ = right_plain_len;
+        let left_vis = brand::strip_ansi_len(left);
+        let right_vis = brand::strip_ansi_len(right);
+        let left_pad = 28usize.saturating_sub(left_vis);
+        let right_pad = 28usize.saturating_sub(right_vis);
         format!(
-            "  {bc}\u{2502}{r}  {:<28}{:<28}  {bc}\u{2502}{r}",
-            left, right
+            "  {bc}\u{2502}{r}  {left}{}{right}{}{}  {bc}\u{2502}{r}",
+            " ".repeat(left_pad),
+            " ".repeat(right_pad),
+            "", // no extra padding needed since we account for left/right
         )
     };
 
