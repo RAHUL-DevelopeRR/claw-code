@@ -4531,9 +4531,11 @@ impl ProviderRuntimeClient {
             match build_provider_entry(fallback_model) {
                 Ok(entry) => chain.push(entry),
                 Err(error) => {
-                    eprintln!(
-                        "warning: skipping unavailable fallback provider {fallback_model}: {error}"
-                    );
+                    if std::env::var("NEURON_DEBUG").is_ok() {
+                        eprintln!(
+                            "warning: skipping unavailable fallback provider {fallback_model}: {error}"
+                        );
+                    }
                 }
             }
         }
@@ -9692,5 +9694,7 @@ printf 'pwsh:%s' "$1"
             )
             .into_bytes()
         }
+    }
+}
     }
 }

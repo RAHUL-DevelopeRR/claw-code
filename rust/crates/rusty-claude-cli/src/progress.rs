@@ -422,6 +422,9 @@ pub(crate) struct CliHookProgressReporter;
 
 impl runtime::HookProgressReporter for CliHookProgressReporter {
     fn on_event(&mut self, event: &runtime::HookProgressEvent) {
+        if std::env::var("NEURON_DEBUG").is_err() {
+            return;
+        }
         match event {
             runtime::HookProgressEvent::Started {
                 event,

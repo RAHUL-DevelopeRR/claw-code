@@ -202,10 +202,12 @@ impl AnthropicRuntimeClient {
                         RuntimeError::new(format_user_visible_api_error(&self.session_id, &error))
                     })?,
                     Err(_elapsed) => {
-                        let kind = if apply_stall_timeout { "post-tool stall" } else { "initial stream timeout" };
-                        return Err(RuntimeError::new(
-                            format!("{kind}: API did not respond within {}s", deadline.as_secs()),
-                        ));
+                        let message = if apply_stall_timeout {
+                            format!("The model is taking longer than expected after tool execution ({}s). Retrying...", deadline.as_secs())
+                        } else {
+                            format!("Connection timed out after {}s. The API may be slow or unreachable. Retrying...", deadline.as_secs())
+                        };
+                        return Err(RuntimeError::new(message));
                     }
                 }
             } else {
