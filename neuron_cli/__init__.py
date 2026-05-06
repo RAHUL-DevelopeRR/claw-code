@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -31,7 +32,11 @@ def main() -> None:
     # Replace sys.argv[0] with the actual binary path so the Rust CLI
     # sees correct program name in --version / help text.
     args = [str(binary), *sys.argv[1:]]
-    os.execv(str(binary), args)
+    # os.execv on Windows does not reliably inherit console std streams,
+    # which silently swallows output for --version / --help.  Use
+    # subprocess.run instead and forward the child's exit code.
+    result = subprocess.run(args, check=False)
+    sys.exit(result.returncode)
 
 
 if __name__ == "__main__":

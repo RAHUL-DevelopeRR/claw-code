@@ -97,7 +97,7 @@ const DEFAULT_DATE: &str = match option_env!("BUILD_DATE") {
     None => "unknown",
 };
 const DEFAULT_OAUTH_CALLBACK_PORT: u16 = 4545;
-const VERSION: &str = "4.0.4";
+const VERSION: &str = "4.0.7";
 const BUILD_TARGET: Option<&str> = option_env!("TARGET");
 const GIT_SHA: Option<&str> = option_env!("GIT_SHA");
 const INTERNAL_PROGRESS_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(3);
@@ -3793,7 +3793,16 @@ fn parse_titled_body(value: &str) -> Option<(String, String)> {
 }
 
 fn render_version_report() -> String {
-    format!("{VERSION} (NeuronCLI)")
+    let mut lines = vec!["NeuronCLI".to_string()];
+    lines.push(format!("  Version          {VERSION}"));
+    if let Some(sha) = GIT_SHA {
+        lines.push(format!("  Git SHA          {sha}"));
+    }
+    if let Some(target) = BUILD_TARGET {
+        lines.push(format!("  Target           {target}"));
+    }
+    lines.push(format!("  Build date       {DEFAULT_DATE}"));
+    lines.join("\n")
 }
 
 fn render_export_text(session: &Session) -> String {
