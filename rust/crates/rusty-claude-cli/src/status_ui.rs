@@ -205,22 +205,22 @@ pub(crate) fn run_shell_escape(cmd: &str) {
 
 pub(crate) fn mode_aware_prompt(mode: &PermissionMode, plan_mode: bool, orchestration_mode: Option<&str>) -> String {
     if plan_mode {
-        return "\x1b[38;2;65;105;195m[plan]\x1b[0m > ".to_string();
+        return "[plan] > ".to_string();
     }
     if let Some(orch) = orchestration_mode {
         return match orch {
-            "divide" => "\x1b[38;2;90;200;250m[divide]\x1b[0m > ".to_string(),
-            "chain" => "\x1b[38;2;240;160;40m[chain]\x1b[0m > ".to_string(),
-            "power" => "\x1b[38;2;200;50;40m[power]\x1b[0m > ".to_string(),
+            "divide" => "[divide] > ".to_string(),
+            "chain" => "[chain] > ".to_string(),
+            "power" => "[power] > ".to_string(),
             _ => "> ".to_string(),
         };
     }
     match mode {
-        PermissionMode::ReadOnly => "\x1b[38;2;136;136;136m[read]\x1b[0m > ".to_string(),
-        PermissionMode::WorkspaceWrite => "\x1b[38;2;240;160;40m[edit]\x1b[0m > ".to_string(),
+        PermissionMode::ReadOnly => "[read] > ".to_string(),
+        PermissionMode::WorkspaceWrite => "[edit] > ".to_string(),
         PermissionMode::DangerFullAccess => "> ".to_string(),
-        PermissionMode::Prompt => "\x1b[38;2;65;105;195m[ask]\x1b[0m > ".to_string(),
-        PermissionMode::Allow => "\x1b[38;2;45;140;60m[auto]\x1b[0m > ".to_string(),
+        PermissionMode::Prompt => "[ask] > ".to_string(),
+        PermissionMode::Allow => "[auto] > ".to_string(),
     }
 }
 

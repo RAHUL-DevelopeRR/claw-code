@@ -398,33 +398,39 @@ pub fn run_power(api_key: &str, user_input: &str) -> String {
         let idx = i + 1;
 
         handles.push(std::thread::spawn(move || {
-            eprintln!(
-                "\x1b[31m[power]\x1b[0m \x1b[2mAgent {}/{}: {} (Azure)...\x1b[0m",
-                idx, total, model
-            );
-            let msgs = vec![serde_json::json!({
-                "role": "user",
-                "content": format!(
-                    "You are an expert developer. Solve this task with maximum quality.\n\
-                     Write complete, production-ready code.\n\nTask: {input}"
-                )
-            })];
-            match azure_call(&key, &model, &msgs, 6000) {
-                Ok(r) => {
-                    eprintln!(
-                        "\x1b[31m[power]\x1b[0m \x1b[32m\u{2713}\x1b[0m {} done ({} tokens)",
-                        r.model, r.tokens
-                    );
-                    Some(r)
+            let _result = std::panic::catch_unwind(|| {
+                eprintln!(
+                    "[power] Agent {}/{}: {} (Azure)...",
+                    idx, total, model
+                );
+                let msgs = vec![serde_json::json!({
+                    "role": "user",
+                    "content": format!(
+                        "You are an expert developer. Solve this task with maximum quality.\n\
+                         Write complete, production-ready code.\n\nTask: {input}"
+                    )
+                })];
+                match azure_call(&key, &model, &msgs, 6000) {
+                    Ok(r) => {
+                        eprintln!(
+                            "[power] ✓ {} done ({} tokens)",
+                            r.model, r.tokens
+                        );
+                        Some(r)
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "[power] ✗ {} failed: {e}",
+                            model
+                        );
+                        None
+                    }
                 }
-                Err(e) => {
-                    eprintln!(
-                        "\x1b[31m[power]\x1b[0m \x1b[31m\u{2717}\x1b[0m {} failed: {e}",
-                        model
-                    );
-                    None
-                }
-            }
+            });
+            _result.unwrap_or_else(|_| {
+                eprintln!("[power] ✗ {} crashed unexpectedly", model);
+                None
+            })
         }));
     }
 
@@ -436,40 +442,46 @@ pub fn run_power(api_key: &str, user_input: &str) -> String {
         let or_key = crate::auth::ensure_api_key();
 
         handles.push(std::thread::spawn(move || {
-            eprintln!(
-                "\x1b[31m[power]\x1b[0m \x1b[2mAgent {}/{}: {} (OpenRouter)...\x1b[0m",
-                total, total, or_model
-            );
-            let Some(api_key) = or_key else {
+            let _result = std::panic::catch_unwind(|| {
                 eprintln!(
-                    "\x1b[31m[power]\x1b[0m \x1b[33m\u{2298}\x1b[0m {} skipped: no auth",
-                    or_model
+                    "[power] Agent {}/{}: {} (OpenRouter)...",
+                    total, total, or_model
                 );
-                return None;
-            };
-            let msgs = vec![serde_json::json!({
-                "role": "user",
-                "content": format!(
-                    "You are an expert developer. Solve this task with maximum quality.\n\
-                     Write complete, production-ready code.\n\nTask: {input}"
-                )
-            })];
-            match openrouter_call(&api_key, &or_model, &msgs, 6000) {
-                Ok(r) => {
+                let Some(api_key) = or_key else {
                     eprintln!(
-                        "\x1b[31m[power]\x1b[0m \x1b[32m\u{2713}\x1b[0m {} done ({} tokens)",
-                        r.model, r.tokens
-                    );
-                    Some(r)
-                }
-                Err(e) => {
-                    eprintln!(
-                        "\x1b[31m[power]\x1b[0m \x1b[33m\u{2298}\x1b[0m {} skipped: {e}",
+                        "[power] ⊘ {} skipped: no auth",
                         or_model
                     );
-                    None
+                    return None;
+                };
+                let msgs = vec![serde_json::json!({
+                    "role": "user",
+                    "content": format!(
+                        "You are an expert developer. Solve this task with maximum quality.\n\
+                         Write complete, production-ready code.\n\nTask: {input}"
+                    )
+                })];
+                match openrouter_call(&api_key, &or_model, &msgs, 6000) {
+                    Ok(r) => {
+                        eprintln!(
+                            "[power] ✓ {} done ({} tokens)",
+                            r.model, r.tokens
+                        );
+                        Some(r)
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "[power] ⊘ {} skipped: {e}",
+                            or_model
+                        );
+                        None
+                    }
                 }
-            }
+            });
+            _result.unwrap_or_else(|_| {
+                eprintln!("[power] ⊘ {} crashed unexpectedly", or_model);
+                None
+            })
         }));
     }
 
